@@ -18,7 +18,7 @@ interface Props {
 export default function ShiftDistributionChart({ data }: Props) {
   if (!data.length) {
     return (
-      <div className="h-[300px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-[300px] flex items-center justify-center text-[#64748B] text-sm">
         No shift data available
       </div>
     );
@@ -79,7 +79,7 @@ export default function ShiftDistributionChart({ data }: Props) {
       </ResponsiveContainer>
       <div className="flex flex-wrap gap-3 mt-2 justify-center">
         {shifts.map((shift) => (
-          <div key={shift} className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <div key={shift} className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
             <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: SHIFT_COLORS[shift] || '#6B7280' }} />
             {shift}
           </div>

@@ -5,10 +5,11 @@ import { supabase } from '@/lib/supabase';
 
 export interface Filters {
   facility: string | null;
-  state: string | null;
   shift: string | null;
   year: number | null;
-  issueTypes: string[];  // multi-select: 'Rounds', 'Safety', 'IT'
+  month: number | null;
+  issueTypes: string[];
+  statuses: string[];
 }
 
 interface FilterOptions {
@@ -17,6 +18,7 @@ interface FilterOptions {
   years: number[];
   groups: string[];
   monitoring_team: string[];
+  statuses: string[];
 }
 
 interface FilterContextType {
@@ -24,6 +26,7 @@ interface FilterContextType {
   filterOptions: FilterOptions;
   setFilter: (key: keyof Filters, value: string | number | string[] | null) => void;
   toggleIssueType: (type: string) => void;
+  toggleStatus: (status: string) => void;
   resetFilters: () => void;
   hasActiveFilters: boolean;
 }
@@ -32,10 +35,11 @@ const ISSUE_TYPES = ['Rounds', 'Safety', 'IT'];
 
 const defaultFilters: Filters = {
   facility: null,
-  state: null,
   shift: null,
   year: null,
+  month: null,
   issueTypes: [],
+  statuses: [],
 };
 
 const defaultOptions: FilterOptions = {
@@ -44,6 +48,7 @@ const defaultOptions: FilterOptions = {
   years: [],
   groups: [],
   monitoring_team: [],
+  statuses: [],
 };
 
 const FilterContext = createContext<FilterContextType>({
@@ -51,6 +56,7 @@ const FilterContext = createContext<FilterContextType>({
   filterOptions: defaultOptions,
   setFilter: () => {},
   toggleIssueType: () => {},
+  toggleStatus: () => {},
   resetFilters: () => {},
   hasActiveFilters: false,
 });
@@ -61,7 +67,20 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function fetchOptions() {
+      // Fetch filter options from RPC
       const { data } = await supabase.rpc('get_filter_options');
+
+      // Fetch distinct issue_status values directly
+      const { data: statusData } = await supabase
+        .from('issues')
+        .select('issue_status')
+        .not('issue_status', 'is', null)
+        .limit(1000);
+
+      const distinctStatuses = statusData
+        ? Array.from(new Set(statusData.map((r: { issue_status: string }) => r.issue_status))).filter(Boolean).sort()
+        : [];
+
       if (data) {
         setFilterOptions({
           facilities: data.facilities || [],
@@ -69,6 +88,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
           years: data.years || [],
           groups: data.groups || [],
           monitoring_team: data.monitoring_team || [],
+          statuses: distinctStatuses as string[],
         });
       }
     }
@@ -89,17 +109,28 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const toggleStatus = (status: string) => {
+    setFilters((prev) => {
+      const current = prev.statuses;
+      const next = current.includes(status)
+        ? current.filter((s) => s !== status)
+        : [...current, status];
+      return { ...prev, statuses: next };
+    });
+  };
+
   const resetFilters = () => setFilters(defaultFilters);
 
   const hasActiveFilters =
     filters.facility !== null ||
-    filters.state !== null ||
     filters.shift !== null ||
     filters.year !== null ||
-    filters.issueTypes.length > 0;
+    filters.month !== null ||
+    filters.issueTypes.length > 0 ||
+    filters.statuses.length > 0;
 
   return (
-    <FilterContext.Provider value={{ filters, filterOptions, setFilter, toggleIssueType, resetFilters, hasActiveFilters }}>
+    <FilterContext.Provider value={{ filters, filterOptions, setFilter, toggleIssueType, toggleStatus, resetFilters, hasActiveFilters }}>
       {children}
     </FilterContext.Provider>
   );

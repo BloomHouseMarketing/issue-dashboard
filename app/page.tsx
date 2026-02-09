@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useFilters } from '@/components/providers/FilterProvider';
-import { FACILITY_STATES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
 import ChartCard from '@/components/ui/ChartCard';
 import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
@@ -12,14 +11,16 @@ import MonthlyTrendChart from '@/components/charts/MonthlyTrendChart';
 import IssueTypeDonut from '@/components/charts/IssueTypeDonut';
 import ShiftDistributionChart from '@/components/charts/ShiftDistributionChart';
 
-interface DashboardStats {
-  total_issues: number;
-  facilities_count: number;
-  groups_count: number;
-  by_issue_type: { rounds: number; safety: number; it: number };
-  by_shift: { NOC_PST: number; AM_PST: number; Swing: number };
-  staff_involved: number;
-  date_range: { earliest: string; latest: string };
+interface IssueRow {
+  facility: string;
+  round_date: string | null;
+  shift: string | null;
+  issue_status: string | null;
+  rounds_issue: string | null;
+  safety_issue: string | null;
+  it_issue: string | null;
+  group_name: string;
+  staff_name: string | null;
 }
 
 interface FacilityOverview {
@@ -63,7 +64,11 @@ const SYNC_COLUMNS: ColumnDef[] = [
 
 export default function OverviewPage() {
   const { filters } = useFilters();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [totalIssues, setTotalIssues] = useState(0);
+  const [facilitiesCount, setFacilitiesCount] = useState(0);
+  const [roundsCount, setRoundsCount] = useState(0);
+  const [safetyCount, setSafetyCount] = useState(0);
+  const [itCount, setItCount] = useState(0);
   const [facilityData, setFacilityData] = useState<FacilityOverview[]>([]);
   const [trendData, setTrendData] = useState<MonthlyTrend[]>([]);
   const [shiftData, setShiftData] = useState<ShiftData[]>([]);
@@ -75,75 +80,140 @@ export default function OverviewPage() {
     async function fetchData() {
       setLoading(true);
 
-      const [statsRes, facilityRes, trendRes, shiftRes, syncRes] = await Promise.all([
-        supabase.rpc('get_dashboard_stats', {
-          p_facility: filters.facility,
-          p_group_name: null,
-          p_year: filters.year,
-          p_month: null,
-        }),
-        supabase.from('v_facility_overview').select('*').order('total_issues', { ascending: false }),
-        supabase.from('v_monthly_trend').select('facility, year_month, total_issues, rounds_count, safety_count, it_count'),
-        supabase.from('v_shift_distribution').select('*'),
+      // Build filtered query on issues table
+      let query = supabase
+        .from('issues')
+        .select('facility, round_date, shift, issue_status, rounds_issue, safety_issue, it_issue, group_name, staff_name');
+
+      // Apply server-side filters
+      if (filters.facility) {
+        query = query.eq('facility', filters.facility);
+      }
+      if (filters.shift) {
+        query = query.eq('shift', filters.shift);
+      }
+
+      // Status filter
+      if (filters.statuses.length > 0) {
+        query = query.in('issue_status', filters.statuses);
+      }
+
+      // Year + Month date range filter
+      if (filters.year && filters.month) {
+        const startDate = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`;
+        const endMonth = filters.month === 12 ? 1 : filters.month + 1;
+        const endYear = filters.month === 12 ? filters.year + 1 : filters.year;
+        const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+        query = query.gte('round_date', startDate).lt('round_date', endDate);
+      } else if (filters.year) {
+        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${filters.year + 1}-01-01`);
+      } else if (filters.month) {
+        // Month without year — use the month text column (JAN, FEB, etc.)
+        const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        query = query.eq('month', monthNames[filters.month - 1]);
+      }
+
+      // Issue type filter — include rows that have at least one selected type
+      if (filters.issueTypes.length > 0) {
+        const conditions: string[] = [];
+        if (filters.issueTypes.includes('Rounds')) conditions.push('rounds_issue.not.is.null');
+        if (filters.issueTypes.includes('Safety')) conditions.push('safety_issue.not.is.null');
+        if (filters.issueTypes.includes('IT')) conditions.push('it_issue.not.is.null');
+        if (conditions.length > 0) {
+          query = query.or(conditions.join(','));
+        }
+      }
+
+      // Fetch issues + sync log in parallel
+      const [issuesRes, syncRes] = await Promise.all([
+        query,
         supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5),
       ]);
 
-      if (statsRes.data) setStats(statsRes.data);
+      if (issuesRes.data) {
+        const issues = issuesRes.data as IssueRow[];
 
-      if (facilityRes.data) {
-        let filtered = facilityRes.data;
-        if (filters.state) {
-          filtered = filtered.filter((f: FacilityOverview) => FACILITY_STATES[f.facility] === filters.state);
-        }
-        if (filters.facility) {
-          filtered = filtered.filter((f: FacilityOverview) => f.facility === filters.facility);
-        }
-        setFacilityData(filtered);
-      }
+        // Compute stats
+        setTotalIssues(issues.length);
+        setFacilitiesCount(new Set(issues.map((i) => i.facility)).size);
+        setRoundsCount(issues.filter((i) => i.rounds_issue != null).length);
+        setSafetyCount(issues.filter((i) => i.safety_issue != null).length);
+        setItCount(issues.filter((i) => i.it_issue != null).length);
 
-      if (trendRes.data) {
-        let filtered = trendRes.data as MonthlyTrend[];
-        if (filters.facility) {
-          filtered = filtered.filter((t) => t.facility === filters.facility);
-        }
-        if (filters.state) {
-          filtered = filtered.filter((t) => FACILITY_STATES[t.facility] === filters.state);
-        }
-
-        // Aggregate by year_month
-        const monthMap = new Map<string, { total: number; rounds: number; safety: number; it: number }>();
-        filtered.forEach((row) => {
-          const existing = monthMap.get(row.year_month) || { total: 0, rounds: 0, safety: 0, it: 0 };
-          existing.total += Number(row.total_issues);
-          existing.rounds += Number(row.rounds_count);
-          existing.safety += Number(row.safety_count);
-          existing.it += Number(row.it_count);
-          monthMap.set(row.year_month, existing);
+        // Compute facility bar chart data
+        const facilityMap = new Map<string, { total: number; rounds: number; safety: number; it: number; groups: Set<string> }>();
+        issues.forEach((issue) => {
+          const f = issue.facility;
+          const existing = facilityMap.get(f) || { total: 0, rounds: 0, safety: 0, it: 0, groups: new Set<string>() };
+          existing.total++;
+          if (issue.rounds_issue) existing.rounds++;
+          if (issue.safety_issue) existing.safety++;
+          if (issue.it_issue) existing.it++;
+          if (issue.group_name) existing.groups.add(issue.group_name);
+          facilityMap.set(f, existing);
         });
 
-        const aggregated = Array.from(monthMap.entries())
-          .map(([ym, counts]) => ({
-            facility: 'All',
-            year_month: ym,
-            total_issues: counts.total,
-            rounds_count: counts.rounds,
-            safety_count: counts.safety,
-            it_count: counts.it,
+        setFacilityData(
+          Array.from(facilityMap.entries()).map(([facility, data]) => ({
+            facility,
+            total_issues: data.total,
+            rounds_count: data.rounds,
+            safety_count: data.safety,
+            it_count: data.it,
+            group_count: data.groups.size,
           }))
-          .sort((a, b) => a.year_month.localeCompare(b.year_month));
+        );
 
-        setTrendData(aggregated);
-      }
+        // Compute monthly trend data
+        const monthMap = new Map<string, { total: number; rounds: number; safety: number; it: number }>();
+        issues.forEach((issue) => {
+          if (!issue.round_date) return;
+          const ym = issue.round_date.substring(0, 7);
+          const existing = monthMap.get(ym) || { total: 0, rounds: 0, safety: 0, it: 0 };
+          existing.total++;
+          if (issue.rounds_issue) existing.rounds++;
+          if (issue.safety_issue) existing.safety++;
+          if (issue.it_issue) existing.it++;
+          monthMap.set(ym, existing);
+        });
 
-      if (shiftRes.data) {
-        let filtered = shiftRes.data as ShiftData[];
-        if (filters.facility) {
-          filtered = filtered.filter((s) => s.facility === filters.facility);
-        }
-        if (filters.state) {
-          filtered = filtered.filter((s) => FACILITY_STATES[s.facility] === filters.state);
-        }
-        setShiftData(filtered);
+        setTrendData(
+          Array.from(monthMap.entries())
+            .map(([ym, counts]) => ({
+              facility: 'All',
+              year_month: ym,
+              total_issues: counts.total,
+              rounds_count: counts.rounds,
+              safety_count: counts.safety,
+              it_count: counts.it,
+            }))
+            .sort((a, b) => a.year_month.localeCompare(b.year_month))
+        );
+
+        // Compute shift distribution data
+        const shiftMap = new Map<string, { facility: string; shift: string; count: number }>();
+        issues.forEach((issue) => {
+          if (!issue.shift) return;
+          const key = `${issue.facility}|${issue.shift}`;
+          const existing = shiftMap.get(key) || { facility: issue.facility, shift: issue.shift, count: 0 };
+          existing.count++;
+          shiftMap.set(key, existing);
+        });
+
+        // Calculate percentages per facility
+        const facilityTotals = new Map<string, number>();
+        shiftMap.forEach((v) => {
+          facilityTotals.set(v.facility, (facilityTotals.get(v.facility) || 0) + v.count);
+        });
+
+        setShiftData(
+          Array.from(shiftMap.values()).map((v) => ({
+            facility: v.facility,
+            shift: v.shift,
+            issue_count: v.count,
+            percentage: Math.round((v.count / (facilityTotals.get(v.facility) || 1)) * 1000) / 10,
+          }))
+        );
       }
 
       if (syncRes.data) setSyncLog(syncRes.data);
@@ -154,14 +224,12 @@ export default function OverviewPage() {
     fetchData();
   }, [filters]);
 
-  // Apply issue type filter to stats display
-  const issueTypeData = stats
-    ? [
-        { name: 'Rounds', value: stats.by_issue_type.rounds, color: '#3B82F6' },
-        { name: 'Safety', value: stats.by_issue_type.safety, color: '#EF4444' },
-        { name: 'IT', value: stats.by_issue_type.it, color: '#6B7280' },
-      ].filter((d) => filters.issueTypes.length === 0 || filters.issueTypes.includes(d.name))
-    : [];
+  // Issue type donut data
+  const issueTypeData = [
+    { name: 'Rounds', value: roundsCount, color: '#3B82F6' },
+    { name: 'Safety', value: safetyCount, color: '#EF4444' },
+    { name: 'IT', value: itCount, color: '#6B7280' },
+  ].filter((d) => filters.issueTypes.length === 0 || filters.issueTypes.includes(d.name));
 
   const col = (key: string) => syncCols.includes(key);
 
@@ -169,12 +237,12 @@ export default function OverviewPage() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-[#F8FAFC]">Executive Overview</h2>
 
-      {/* Summary Cards — conditionally show based on issue type filter */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Issues"
-          value={stats?.total_issues ?? 0}
-          subtitle={`Across ${stats?.facilities_count ?? 0} facilities`}
+          value={totalIssues}
+          subtitle={`Across ${facilitiesCount} facilities`}
           loading={loading}
           icon={
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -185,7 +253,7 @@ export default function OverviewPage() {
         {(filters.issueTypes.length === 0 || filters.issueTypes.includes('Rounds')) && (
           <StatCard
             title="Rounds Issues"
-            value={stats?.by_issue_type.rounds ?? 0}
+            value={roundsCount}
             subtitle="Staff compliance issues"
             loading={loading}
             icon={
@@ -198,7 +266,7 @@ export default function OverviewPage() {
         {(filters.issueTypes.length === 0 || filters.issueTypes.includes('Safety')) && (
           <StatCard
             title="Safety Issues"
-            value={stats?.by_issue_type.safety ?? 0}
+            value={safetyCount}
             subtitle="Safety incidents reported"
             loading={loading}
             icon={
@@ -211,7 +279,7 @@ export default function OverviewPage() {
         {(filters.issueTypes.length === 0 || filters.issueTypes.includes('IT')) && (
           <StatCard
             title="IT Issues"
-            value={stats?.by_issue_type.it ?? 0}
+            value={itCount}
             subtitle="Infrastructure problems"
             loading={loading}
             icon={

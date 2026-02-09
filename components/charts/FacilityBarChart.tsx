@@ -1,7 +1,7 @@
 'use client';
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { FACILITY_COLORS, FACILITY_STATES, STATE_COLORS } from '@/lib/constants';
+import { FACILITY_COLORS } from '@/lib/constants';
 import { formatNumber } from '@/lib/utils';
 
 interface FacilityData {
@@ -19,7 +19,7 @@ interface Props {
 export default function FacilityBarChart({ data }: Props) {
   if (!data.length) {
     return (
-      <div className="h-[300px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-[300px] flex items-center justify-center text-[#64748B] text-sm">
         No facility data available
       </div>
     );
@@ -51,27 +51,18 @@ export default function FacilityBarChart({ data }: Props) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [formatNumber(Number(value)), 'Issues']}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            labelFormatter={(label: any) => `${label} (${FACILITY_STATES[String(label)] || ''})`}
+            labelFormatter={(label: any) => String(label)}
           />
           <Bar dataKey="total_issues" radius={[0, 4, 4, 0]} animationDuration={300}>
             {sorted.map((entry) => (
               <Cell
                 key={entry.facility}
-                fill={FACILITY_COLORS[entry.facility] || STATE_COLORS[FACILITY_STATES[entry.facility]] || '#3B82F6'}
+                fill={FACILITY_COLORS[entry.facility] || '#3B82F6'}
               />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 mt-2 justify-center">
-        {Object.entries(STATE_COLORS).map(([state, color]) => (
-          <div key={state} className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-            {state}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

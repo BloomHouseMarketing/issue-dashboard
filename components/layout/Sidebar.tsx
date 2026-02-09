@@ -68,9 +68,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
           {!collapsed && (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-[#3B82F6] flex items-center justify-center">
-                <span className="text-white font-bold text-sm">MR</span>
+                <span className="text-white font-bold text-sm">CV</span>
               </div>
-              <span className="text-[#F8FAFC] font-semibold text-sm">MHC Rounds</span>
+              <span className="text-[#F8FAFC] font-semibold text-sm">Careview</span>
             </div>
           )}
           <button
