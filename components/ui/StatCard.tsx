@@ -12,21 +12,21 @@ interface StatCardProps {
 export default function StatCard({ title, value, subtitle, change, icon, loading }: StatCardProps) {
   if (loading) {
     return (
-      <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+      <div className="bg-[#1E293B] border border-[#334155] rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <div className="h-4 w-24 bg-surface-hover rounded animate-pulse" />
-          <div className="h-5 w-14 bg-surface-hover rounded-full animate-pulse" />
+          <div className="h-4 w-24 bg-[#334155] rounded animate-pulse" />
+          <div className="h-5 w-14 bg-[#334155] rounded-full animate-pulse" />
         </div>
-        <div className="h-9 w-20 bg-surface-hover rounded animate-pulse mb-2" />
-        <div className="h-3 w-32 bg-surface-hover rounded animate-pulse" />
+        <div className="h-9 w-20 bg-[#334155] rounded animate-pulse mb-2" />
+        <div className="h-3 w-32 bg-[#334155] rounded animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+    <div className="bg-[#1E293B] border border-[#334155] rounded-xl p-6 shadow-sm">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-text-secondary flex items-center gap-2">
+        <span className="text-sm font-medium text-[#94A3B8] flex items-center gap-2">
           {icon}
           {title}
         </span>
@@ -36,11 +36,11 @@ export default function StatCard({ title, value, subtitle, change, icon, loading
           </span>
         )}
       </div>
-      <div className="text-3xl font-bold text-text-primary font-mono mt-2">
+      <div className="text-3xl font-bold text-[#F8FAFC] font-mono mt-2">
         {typeof value === 'number' ? formatNumber(value) : value}
       </div>
       {subtitle && (
-        <p className="text-xs text-text-muted mt-1">{subtitle}</p>
+        <p className="text-xs text-[#64748B] mt-1">{subtitle}</p>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { useFilters } from '@/components/providers/FilterProvider';
 import StatCard from '@/components/ui/StatCard';
 import ChartCard from '@/components/ui/ChartCard';
 import MonthlyTrendChart from '@/components/charts/MonthlyTrendChart';
+import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import { formatNumber } from '@/lib/utils';
 
 interface GroupBreakdown {
@@ -63,6 +64,34 @@ interface TrendData {
   it_count: number;
 }
 
+// Column definitions for each table
+const GROUP_COLUMNS: ColumnDef[] = [
+  { key: 'group_name', label: 'Group' },
+  { key: 'issue_count', label: 'Issues' },
+  { key: 'rounds_count', label: 'Rounds' },
+  { key: 'safety_count', label: 'Safety' },
+  { key: 'it_count', label: 'IT' },
+];
+
+const STAFF_COLUMNS: ColumnDef[] = [
+  { key: 'staff_name', label: 'Staff' },
+  { key: 'total_issues', label: 'Issues' },
+  { key: 'groups_involved', label: 'Groups' },
+  { key: 'rounds_count', label: 'Rounds' },
+  { key: 'safety_count', label: 'Safety' },
+  { key: 'first_issue', label: 'First' },
+  { key: 'last_issue', label: 'Last' },
+];
+
+const ISSUE_COLUMNS: ColumnDef[] = [
+  { key: 'round_date', label: 'Date' },
+  { key: 'group_name', label: 'Group' },
+  { key: 'shift', label: 'Shift' },
+  { key: 'type', label: 'Type' },
+  { key: 'staff_name', label: 'Staff' },
+  { key: 'result_status', label: 'Status' },
+];
+
 export default function FacilityPage() {
   const { filters, filterOptions, setFilter } = useFilters();
   const selectedFacility = filters.facility || filterOptions.facilities?.[0] || '';
@@ -79,6 +108,15 @@ export default function FacilityPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [loading, setLoading] = useState(true);
   const pageSize = 25;
+
+  // Column visibility state for each table
+  const [groupVisibleCols, setGroupVisibleCols] = useState(GROUP_COLUMNS.map(c => c.key));
+  const [staffVisibleCols, setStaffVisibleCols] = useState(STAFF_COLUMNS.map(c => c.key));
+  const [issueVisibleCols, setIssueVisibleCols] = useState(ISSUE_COLUMNS.map(c => c.key));
+
+  const groupCol = (key: string) => groupVisibleCols.includes(key);
+  const staffCol = (key: string) => staffVisibleCols.includes(key);
+  const issueCol = (key: string) => issueVisibleCols.includes(key);
 
   useEffect(() => {
     if (!selectedFacility) return;
@@ -134,7 +172,7 @@ export default function FacilityPage() {
     setPage(0);
   }, [selectedFacility, filters.year]);
 
-  // Fetch issues with pagination and search
+  // Fetch issues with pagination, search, and issue type filtering
   useEffect(() => {
     if (!selectedFacility) return;
 
@@ -150,13 +188,24 @@ export default function FacilityPage() {
         query = query.or(`item_name.ilike.%${search}%,issue_note.ilike.%${search}%`);
       }
 
+      // Apply issue type filter from global filters
+      if (filters.issueTypes.length > 0) {
+        const typeConditions: string[] = [];
+        if (filters.issueTypes.includes('Rounds')) typeConditions.push('rounds_issue.not.is.null');
+        if (filters.issueTypes.includes('Safety')) typeConditions.push('safety_issue.not.is.null');
+        if (filters.issueTypes.includes('IT')) typeConditions.push('it_issue.not.is.null');
+        if (typeConditions.length > 0) {
+          query = query.or(typeConditions.join(','));
+        }
+      }
+
       const { data, count } = await query;
       if (data) setIssues(data);
       if (count !== null) setIssueCount(count);
     }
 
     fetchIssues();
-  }, [selectedFacility, page, search]);
+  }, [selectedFacility, page, search, filters.issueTypes]);
 
   const sortedGroups = useMemo(() => {
     return [...groups].sort((a, b) => {
@@ -185,14 +234,17 @@ export default function FacilityPage() {
     return types.join(', ') || '—';
   }
 
+  // Count visible columns for colSpan on empty state row
+  const visibleIssueColCount = ISSUE_COLUMNS.filter(c => issueVisibleCols.includes(c.key)).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <h2 className="text-2xl font-bold text-text-primary">Facility Deep Dive</h2>
+        <h2 className="text-2xl font-bold text-[#F8FAFC]">Facility Deep Dive</h2>
         <select
           value={selectedFacility}
           onChange={(e) => setFilter('facility', e.target.value)}
-          className="bg-surface-hover border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="bg-[#334155] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           {filterOptions.facilities?.map((f: string) => (
             <option key={f} value={f}>{f}</option>
@@ -214,39 +266,70 @@ export default function FacilityPage() {
       </ChartCard>
 
       {/* Group Breakdown Table */}
-      <ChartCard title="Group Breakdown" loading={loading}>
+      <ChartCard
+        title="Group Breakdown"
+        action={<ColumnSelector columns={GROUP_COLUMNS} visibleColumns={groupVisibleCols} onChange={setGroupVisibleCols} />}
+        loading={loading}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                {[
-                  { key: 'group_name', label: 'Group' },
-                  { key: 'issue_count', label: 'Issues' },
-                  { key: 'rounds_count', label: 'Rounds' },
-                  { key: 'safety_count', label: 'Safety' },
-                  { key: 'it_count', label: 'IT' },
-                ].map((col) => (
+              <tr className="text-xs font-semibold uppercase tracking-wider text-[#64748B] border-b border-[#334155]">
+                {groupCol('group_name') && (
                   <th
-                    key={col.key}
-                    className={`py-2 px-3 cursor-pointer hover:text-text-secondary ${col.key === 'group_name' ? 'text-left' : 'text-right'}`}
-                    onClick={() => handleSort(col.key)}
+                    className="py-2 px-3 cursor-pointer hover:text-[#94A3B8] text-left"
+                    onClick={() => handleSort('group_name')}
                   >
-                    {col.label}
-                    {sortCol === col.key && (
-                      <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>
-                    )}
+                    Group
+                    {sortCol === 'group_name' && <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>}
                   </th>
-                ))}
+                )}
+                {groupCol('issue_count') && (
+                  <th
+                    className="py-2 px-3 cursor-pointer hover:text-[#94A3B8] text-right"
+                    onClick={() => handleSort('issue_count')}
+                  >
+                    Issues
+                    {sortCol === 'issue_count' && <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </th>
+                )}
+                {groupCol('rounds_count') && (
+                  <th
+                    className="py-2 px-3 cursor-pointer hover:text-[#94A3B8] text-right"
+                    onClick={() => handleSort('rounds_count')}
+                  >
+                    Rounds
+                    {sortCol === 'rounds_count' && <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </th>
+                )}
+                {groupCol('safety_count') && (
+                  <th
+                    className="py-2 px-3 cursor-pointer hover:text-[#94A3B8] text-right"
+                    onClick={() => handleSort('safety_count')}
+                  >
+                    Safety
+                    {sortCol === 'safety_count' && <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </th>
+                )}
+                {groupCol('it_count') && (
+                  <th
+                    className="py-2 px-3 cursor-pointer hover:text-[#94A3B8] text-right"
+                    onClick={() => handleSort('it_count')}
+                  >
+                    IT
+                    {sortCol === 'it_count' && <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {sortedGroups.map((group, i) => (
-                <tr key={i} className="border-b border-border/50 hover:bg-surface-hover/50">
-                  <td className="py-2 px-3 text-text-primary">{group.group_name}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-primary">{formatNumber(Number(group.issue_count))}</td>
-                  <td className="py-2 px-3 text-right font-mono text-blue-400">{formatNumber(Number(group.rounds_count))}</td>
-                  <td className="py-2 px-3 text-right font-mono text-red-400">{formatNumber(Number(group.safety_count))}</td>
-                  <td className="py-2 px-3 text-right font-mono text-gray-400">{formatNumber(Number(group.it_count))}</td>
+                <tr key={i} className="border-b border-[#334155]/50 hover:bg-[#334155]/50">
+                  {groupCol('group_name') && <td className="py-2 px-3 text-[#F8FAFC]">{group.group_name}</td>}
+                  {groupCol('issue_count') && <td className="py-2 px-3 text-right font-mono text-[#F8FAFC]">{formatNumber(Number(group.issue_count))}</td>}
+                  {groupCol('rounds_count') && <td className="py-2 px-3 text-right font-mono text-blue-400">{formatNumber(Number(group.rounds_count))}</td>}
+                  {groupCol('safety_count') && <td className="py-2 px-3 text-right font-mono text-red-400">{formatNumber(Number(group.safety_count))}</td>}
+                  {groupCol('it_count') && <td className="py-2 px-3 text-right font-mono text-gray-400">{formatNumber(Number(group.it_count))}</td>}
                 </tr>
               ))}
             </tbody>
@@ -255,30 +338,34 @@ export default function FacilityPage() {
       </ChartCard>
 
       {/* Staff Summary */}
-      <ChartCard title="Staff Summary" loading={loading}>
+      <ChartCard
+        title="Staff Summary"
+        action={<ColumnSelector columns={STAFF_COLUMNS} visibleColumns={staffVisibleCols} onChange={setStaffVisibleCols} />}
+        loading={loading}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="text-left py-2 px-3">Staff</th>
-                <th className="text-right py-2 px-3">Issues</th>
-                <th className="text-right py-2 px-3">Groups</th>
-                <th className="text-right py-2 px-3">Rounds</th>
-                <th className="text-right py-2 px-3">Safety</th>
-                <th className="text-right py-2 px-3">First</th>
-                <th className="text-right py-2 px-3">Last</th>
+              <tr className="text-xs font-semibold uppercase tracking-wider text-[#64748B] border-b border-[#334155]">
+                {staffCol('staff_name') && <th className="text-left py-2 px-3">Staff</th>}
+                {staffCol('total_issues') && <th className="text-right py-2 px-3">Issues</th>}
+                {staffCol('groups_involved') && <th className="text-right py-2 px-3">Groups</th>}
+                {staffCol('rounds_count') && <th className="text-right py-2 px-3">Rounds</th>}
+                {staffCol('safety_count') && <th className="text-right py-2 px-3">Safety</th>}
+                {staffCol('first_issue') && <th className="text-right py-2 px-3">First</th>}
+                {staffCol('last_issue') && <th className="text-right py-2 px-3">Last</th>}
               </tr>
             </thead>
             <tbody>
               {staff.slice(0, 20).map((s, i) => (
-                <tr key={i} className="border-b border-border/50 hover:bg-surface-hover/50">
-                  <td className="py-2 px-3 text-text-primary">{s.staff_name}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-primary">{s.total_issues}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-secondary">{s.groups_involved}</td>
-                  <td className="py-2 px-3 text-right font-mono text-blue-400">{s.rounds_count}</td>
-                  <td className="py-2 px-3 text-right font-mono text-red-400">{s.safety_count}</td>
-                  <td className="py-2 px-3 text-right text-text-muted">{s.first_issue || '—'}</td>
-                  <td className="py-2 px-3 text-right text-text-muted">{s.last_issue || '—'}</td>
+                <tr key={i} className="border-b border-[#334155]/50 hover:bg-[#334155]/50">
+                  {staffCol('staff_name') && <td className="py-2 px-3 text-[#F8FAFC]">{s.staff_name}</td>}
+                  {staffCol('total_issues') && <td className="py-2 px-3 text-right font-mono text-[#F8FAFC]">{s.total_issues}</td>}
+                  {staffCol('groups_involved') && <td className="py-2 px-3 text-right font-mono text-[#94A3B8]">{s.groups_involved}</td>}
+                  {staffCol('rounds_count') && <td className="py-2 px-3 text-right font-mono text-blue-400">{s.rounds_count}</td>}
+                  {staffCol('safety_count') && <td className="py-2 px-3 text-right font-mono text-red-400">{s.safety_count}</td>}
+                  {staffCol('first_issue') && <td className="py-2 px-3 text-right text-[#64748B]">{s.first_issue || '—'}</td>}
+                  {staffCol('last_issue') && <td className="py-2 px-3 text-right text-[#64748B]">{s.last_issue || '—'}</td>}
                 </tr>
               ))}
             </tbody>
@@ -291,14 +378,15 @@ export default function FacilityPage() {
         title="Issues"
         action={
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">{formatNumber(issueCount)} total</span>
+            <span className="text-xs text-[#64748B]">{formatNumber(issueCount)} total</span>
             <input
               type="text"
               placeholder="Search issues..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="bg-surface-hover border border-border rounded-lg px-3 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-accent w-48"
+              className="bg-[#334155] border border-[#334155] rounded-lg px-3 py-1 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-blue-500 w-48"
             />
+            <ColumnSelector columns={ISSUE_COLUMNS} visibleColumns={issueVisibleCols} onChange={setIssueVisibleCols} />
           </div>
         }
         loading={loading}
@@ -306,39 +394,43 @@ export default function FacilityPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="text-left py-2 px-3">Date</th>
-                <th className="text-left py-2 px-3">Group</th>
-                <th className="text-left py-2 px-3">Shift</th>
-                <th className="text-left py-2 px-3">Type</th>
-                <th className="text-left py-2 px-3">Staff</th>
-                <th className="text-left py-2 px-3">Status</th>
+              <tr className="text-xs font-semibold uppercase tracking-wider text-[#64748B] border-b border-[#334155]">
+                {issueCol('round_date') && <th className="text-left py-2 px-3">Date</th>}
+                {issueCol('group_name') && <th className="text-left py-2 px-3">Group</th>}
+                {issueCol('shift') && <th className="text-left py-2 px-3">Shift</th>}
+                {issueCol('type') && <th className="text-left py-2 px-3">Type</th>}
+                {issueCol('staff_name') && <th className="text-left py-2 px-3">Staff</th>}
+                {issueCol('result_status') && <th className="text-left py-2 px-3">Status</th>}
               </tr>
             </thead>
             <tbody>
               {issues.map((issue) => (
-                <tr key={issue.id} className="border-b border-border/50 hover:bg-surface-hover/50">
-                  <td className="py-2 px-3 text-text-primary whitespace-nowrap">{issue.round_date || '—'}</td>
-                  <td className="py-2 px-3 text-text-secondary max-w-[200px] truncate">{issue.group_name}</td>
-                  <td className="py-2 px-3 text-text-secondary">{issue.shift || '—'}</td>
-                  <td className="py-2 px-3">
-                    <span className="text-xs">{getIssueType(issue)}</span>
-                  </td>
-                  <td className="py-2 px-3 text-text-secondary">{issue.staff_name || '—'}</td>
-                  <td className="py-2 px-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      issue.result_status === 'Done' || issue.result_status === 'Resolved'
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-surface-hover text-text-secondary'
-                    }`}>
-                      {issue.result_status || issue.issue_status || '—'}
-                    </span>
-                  </td>
+                <tr key={issue.id} className="border-b border-[#334155]/50 hover:bg-[#334155]/50">
+                  {issueCol('round_date') && <td className="py-2 px-3 text-[#F8FAFC] whitespace-nowrap">{issue.round_date || '—'}</td>}
+                  {issueCol('group_name') && <td className="py-2 px-3 text-[#94A3B8] max-w-[200px] truncate">{issue.group_name}</td>}
+                  {issueCol('shift') && <td className="py-2 px-3 text-[#94A3B8]">{issue.shift || '—'}</td>}
+                  {issueCol('type') && (
+                    <td className="py-2 px-3">
+                      <span className="text-xs">{getIssueType(issue)}</span>
+                    </td>
+                  )}
+                  {issueCol('staff_name') && <td className="py-2 px-3 text-[#94A3B8]">{issue.staff_name || '—'}</td>}
+                  {issueCol('result_status') && (
+                    <td className="py-2 px-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        issue.result_status === 'Done' || issue.result_status === 'Resolved'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-[#334155] text-[#94A3B8]'
+                      }`}>
+                        {issue.result_status || issue.issue_status || '—'}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
               {issues.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-text-muted">
+                  <td colSpan={visibleIssueColCount} className="py-8 text-center text-[#64748B]">
                     No issues found. Try adjusting your search.
                   </td>
                 </tr>
@@ -349,22 +441,22 @@ export default function FacilityPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-            <span className="text-xs text-text-muted">
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#334155]">
+            <span className="text-xs text-[#64748B]">
               Page {page + 1} of {totalPages}
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(Math.max(0, page - 1))}
                 disabled={page === 0}
-                className="px-3 py-1 text-xs bg-surface-hover text-text-secondary rounded-lg disabled:opacity-50 hover:text-text-primary"
+                className="px-3 py-1 text-xs bg-[#334155] text-[#94A3B8] rounded-lg disabled:opacity-50 hover:text-[#F8FAFC]"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
                 disabled={page >= totalPages - 1}
-                className="px-3 py-1 text-xs bg-surface-hover text-text-secondary rounded-lg disabled:opacity-50 hover:text-text-primary"
+                className="px-3 py-1 text-xs bg-[#334155] text-[#94A3B8] rounded-lg disabled:opacity-50 hover:text-[#F8FAFC]"
               >
                 Next
               </button>

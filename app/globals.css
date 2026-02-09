@@ -29,6 +29,30 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
+/* Fix native select/option visibility on dark backgrounds */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #1E293B;
+  color: #F8FAFC;
+}
+
+select option:checked {
+  background-color: #334155;
+}
+
+/* Fix native checkbox visibility */
+input[type="checkbox"] {
+  accent-color: #3B82F6;
+}
+
+/* Fix input placeholders */
+input::placeholder {
+  color: #64748B;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
