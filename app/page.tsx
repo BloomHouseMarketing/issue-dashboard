@@ -6,6 +6,7 @@ import { useFilters } from '@/components/providers/FilterProvider';
 import { FACILITY_STATES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
 import ChartCard from '@/components/ui/ChartCard';
+import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import FacilityBarChart from '@/components/charts/FacilityBarChart';
 import MonthlyTrendChart from '@/components/charts/MonthlyTrendChart';
 import IssueTypeDonut from '@/components/charts/IssueTypeDonut';
@@ -53,6 +54,13 @@ interface SyncLog {
   facility: string;
 }
 
+const SYNC_COLUMNS: ColumnDef[] = [
+  { key: 'status', label: 'Status' },
+  { key: 'facility', label: 'Facility' },
+  { key: 'items_synced', label: 'Items' },
+  { key: 'completed_at', label: 'Completed' },
+];
+
 export default function OverviewPage() {
   const { filters } = useFilters();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -61,6 +69,7 @@ export default function OverviewPage() {
   const [shiftData, setShiftData] = useState<ShiftData[]>([]);
   const [syncLog, setSyncLog] = useState<SyncLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncCols, setSyncCols] = useState(SYNC_COLUMNS.map((c) => c.key));
 
   useEffect(() => {
     async function fetchData() {
@@ -93,7 +102,6 @@ export default function OverviewPage() {
       }
 
       if (trendRes.data) {
-        // Aggregate by year_month across all facilities (or filter)
         let filtered = trendRes.data as MonthlyTrend[];
         if (filters.facility) {
           filtered = filtered.filter((t) => t.facility === filters.facility);
@@ -146,19 +154,22 @@ export default function OverviewPage() {
     fetchData();
   }, [filters]);
 
+  // Apply issue type filter to stats display
   const issueTypeData = stats
     ? [
         { name: 'Rounds', value: stats.by_issue_type.rounds, color: '#3B82F6' },
         { name: 'Safety', value: stats.by_issue_type.safety, color: '#EF4444' },
         { name: 'IT', value: stats.by_issue_type.it, color: '#6B7280' },
-      ]
+      ].filter((d) => filters.issueTypes.length === 0 || filters.issueTypes.includes(d.name))
     : [];
+
+  const col = (key: string) => syncCols.includes(key);
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-text-primary">Executive Overview</h2>
+      <h2 className="text-2xl font-bold text-[#F8FAFC]">Executive Overview</h2>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — conditionally show based on issue type filter */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Issues"
@@ -171,39 +182,45 @@ export default function OverviewPage() {
             </svg>
           }
         />
-        <StatCard
-          title="Rounds Issues"
-          value={stats?.by_issue_type.rounds ?? 0}
-          subtitle="Staff compliance issues"
-          loading={loading}
-          icon={
-            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-        />
-        <StatCard
-          title="Safety Issues"
-          value={stats?.by_issue_type.safety ?? 0}
-          subtitle="Safety incidents reported"
-          loading={loading}
-          icon={
-            <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-          }
-        />
-        <StatCard
-          title="IT Issues"
-          value={stats?.by_issue_type.it ?? 0}
-          subtitle="Infrastructure problems"
-          loading={loading}
-          icon={
-            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
-            </svg>
-          }
-        />
+        {(filters.issueTypes.length === 0 || filters.issueTypes.includes('Rounds')) && (
+          <StatCard
+            title="Rounds Issues"
+            value={stats?.by_issue_type.rounds ?? 0}
+            subtitle="Staff compliance issues"
+            loading={loading}
+            icon={
+              <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
+          />
+        )}
+        {(filters.issueTypes.length === 0 || filters.issueTypes.includes('Safety')) && (
+          <StatCard
+            title="Safety Issues"
+            value={stats?.by_issue_type.safety ?? 0}
+            subtitle="Safety incidents reported"
+            loading={loading}
+            icon={
+              <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            }
+          />
+        )}
+        {(filters.issueTypes.length === 0 || filters.issueTypes.includes('IT')) && (
+          <StatCard
+            title="IT Issues"
+            value={stats?.by_issue_type.it ?? 0}
+            subtitle="Infrastructure problems"
+            loading={loading}
+            icon={
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+              </svg>
+            }
+          />
+        )}
       </div>
 
       {/* Charts Row 1: Facility Bar + Monthly Trend */}
@@ -227,37 +244,45 @@ export default function OverviewPage() {
       </div>
 
       {/* Sync Status */}
-      <ChartCard title="Recent Sync Activity" loading={loading}>
+      <ChartCard
+        title="Recent Sync Activity"
+        loading={loading}
+        action={<ColumnSelector columns={SYNC_COLUMNS} visibleColumns={syncCols} onChange={setSyncCols} />}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="text-left py-2 px-3">Status</th>
-                <th className="text-left py-2 px-3">Facility</th>
-                <th className="text-right py-2 px-3">Items</th>
-                <th className="text-right py-2 px-3">Completed</th>
+              <tr className="text-xs font-semibold uppercase tracking-wider text-[#64748B] border-b border-[#334155]">
+                {col('status') && <th className="text-left py-2 px-3">Status</th>}
+                {col('facility') && <th className="text-left py-2 px-3">Facility</th>}
+                {col('items_synced') && <th className="text-right py-2 px-3">Items</th>}
+                {col('completed_at') && <th className="text-right py-2 px-3">Completed</th>}
               </tr>
             </thead>
             <tbody>
               {syncLog.map((log, i) => (
-                <tr key={i} className="border-b border-border/50 hover:bg-surface-hover/50">
-                  <td className="py-2 px-3">
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                      log.status === 'completed' ? 'text-emerald-400' :
-                      log.status === 'failed' ? 'text-red-400' : 'text-amber-400'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        log.status === 'completed' ? 'bg-emerald-400' :
-                        log.status === 'failed' ? 'bg-red-400' : 'bg-amber-400'
-                      }`} />
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-text-secondary">{log.facility || '—'}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-primary">{log.items_synced}</td>
-                  <td className="py-2 px-3 text-right text-text-secondary">
-                    {log.completed_at ? new Date(log.completed_at).toLocaleString() : '—'}
-                  </td>
+                <tr key={i} className="border-b border-[#334155]/50 hover:bg-[#334155]/50">
+                  {col('status') && (
+                    <td className="py-2 px-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                        log.status === 'completed' ? 'text-emerald-400' :
+                        log.status === 'failed' ? 'text-red-400' : 'text-amber-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          log.status === 'completed' ? 'bg-emerald-400' :
+                          log.status === 'failed' ? 'bg-red-400' : 'bg-amber-400'
+                        }`} />
+                        {log.status}
+                      </span>
+                    </td>
+                  )}
+                  {col('facility') && <td className="py-2 px-3 text-[#94A3B8]">{log.facility || '—'}</td>}
+                  {col('items_synced') && <td className="py-2 px-3 text-right font-mono text-[#F8FAFC]">{log.items_synced}</td>}
+                  {col('completed_at') && (
+                    <td className="py-2 px-3 text-right text-[#94A3B8]">
+                      {log.completed_at ? new Date(log.completed_at).toLocaleString() : '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

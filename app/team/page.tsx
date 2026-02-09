@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useFilters } from '@/components/providers/FilterProvider';
 import ChartCard from '@/components/ui/ChartCard';
 import StatCard from '@/components/ui/StatCard';
+import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import { formatNumber } from '@/lib/utils';
 
 interface TeamMember {
@@ -28,12 +29,24 @@ interface ActivityDay {
   count: number;
 }
 
+const TEAM_COLUMNS: ColumnDef[] = [
+  { key: 'rank', label: 'Rank' },
+  { key: 'name', label: 'Team Member' },
+  { key: 'issues', label: 'Issues Reported' },
+  { key: 'facilities', label: 'Facilities' },
+  { key: 'active_days', label: 'Active Days' },
+  { key: 'first_report', label: 'First Report' },
+  { key: 'last_report', label: 'Last Report' },
+];
+
 export default function TeamPage() {
   const { filters } = useFilters();
   const [teamData, setTeamData] = useState<TeamMember[]>([]);
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [activityData, setActivityData] = useState<ActivityDay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teamCols, setTeamCols] = useState(TEAM_COLUMNS.map(c => c.key));
+  const col = (key: string) => teamCols.includes(key);
 
   useEffect(() => {
     async function fetchData() {
@@ -100,7 +113,7 @@ export default function TeamPage() {
   };
 
   const getHeatColor = (count: number): string => {
-    if (count === 0) return 'bg-surface-hover';
+    if (count === 0) return 'bg-[#334155]';
     const intensity = Math.min(count / maxCount, 1);
     if (intensity < 0.25) return 'bg-blue-900/40';
     if (intensity < 0.5) return 'bg-blue-800/60';
@@ -131,7 +144,7 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-text-primary">Monitoring Team</h2>
+      <h2 className="text-2xl font-bold text-[#F8FAFC]">Monitoring Team</h2>
 
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -141,39 +154,51 @@ export default function TeamPage() {
       </div>
 
       {/* Team Leaderboard */}
-      <ChartCard title="Team Leaderboard" loading={loading}>
+      <ChartCard
+        title="Team Leaderboard"
+        loading={loading}
+        action={
+          <ColumnSelector
+            columns={TEAM_COLUMNS}
+            visibleColumns={teamCols}
+            onChange={setTeamCols}
+          />
+        }
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="text-left py-2 px-3">Rank</th>
-                <th className="text-left py-2 px-3">Team Member</th>
-                <th className="text-right py-2 px-3">Issues Reported</th>
-                <th className="text-right py-2 px-3">Facilities</th>
-                <th className="text-right py-2 px-3">Active Days</th>
-                <th className="text-right py-2 px-3">First Report</th>
-                <th className="text-right py-2 px-3">Last Report</th>
+              <tr className="text-xs font-semibold uppercase tracking-wider text-[#64748B] border-b border-[#334155]">
+                {col('rank') && <th className="text-left py-2 px-3">Rank</th>}
+                {col('name') && <th className="text-left py-2 px-3">Team Member</th>}
+                {col('issues') && <th className="text-right py-2 px-3">Issues Reported</th>}
+                {col('facilities') && <th className="text-right py-2 px-3">Facilities</th>}
+                {col('active_days') && <th className="text-right py-2 px-3">Active Days</th>}
+                {col('first_report') && <th className="text-right py-2 px-3">First Report</th>}
+                {col('last_report') && <th className="text-right py-2 px-3">Last Report</th>}
               </tr>
             </thead>
             <tbody>
               {teamData.map((member, i) => (
-                <tr key={member.live_monitoring_team} className="border-b border-border/50 hover:bg-surface-hover/50">
-                  <td className="py-2 px-3">
-                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                      i === 0 ? 'bg-amber-500/20 text-amber-400' :
-                      i === 1 ? 'bg-slate-400/20 text-slate-300' :
-                      i === 2 ? 'bg-orange-600/20 text-orange-400' :
-                      'bg-surface-hover text-text-muted'
-                    }`}>
-                      {i + 1}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-text-primary font-medium">{member.live_monitoring_team}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-primary">{formatNumber(Number(member.issues_reported))}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-secondary">{member.facilities_covered}</td>
-                  <td className="py-2 px-3 text-right font-mono text-text-secondary">{member.active_days}</td>
-                  <td className="py-2 px-3 text-right text-text-muted">{member.first_report || '—'}</td>
-                  <td className="py-2 px-3 text-right text-text-muted">{member.last_report || '—'}</td>
+                <tr key={member.live_monitoring_team} className="border-b border-[#334155]/50 hover:bg-[#334155]/50">
+                  {col('rank') && (
+                    <td className="py-2 px-3">
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                        i === 0 ? 'bg-amber-500/20 text-amber-400' :
+                        i === 1 ? 'bg-slate-400/20 text-slate-300' :
+                        i === 2 ? 'bg-orange-600/20 text-orange-400' :
+                        'bg-[#334155] text-[#64748B]'
+                      }`}>
+                        {i + 1}
+                      </span>
+                    </td>
+                  )}
+                  {col('name') && <td className="py-2 px-3 text-[#F8FAFC] font-medium">{member.live_monitoring_team}</td>}
+                  {col('issues') && <td className="py-2 px-3 text-right font-mono text-[#F8FAFC]">{formatNumber(Number(member.issues_reported))}</td>}
+                  {col('facilities') && <td className="py-2 px-3 text-right font-mono text-[#94A3B8]">{member.facilities_covered}</td>}
+                  {col('active_days') && <td className="py-2 px-3 text-right font-mono text-[#94A3B8]">{member.active_days}</td>}
+                  {col('first_report') && <td className="py-2 px-3 text-right text-[#64748B]">{member.first_report || '—'}</td>}
+                  {col('last_report') && <td className="py-2 px-3 text-right text-[#64748B]">{member.last_report || '—'}</td>}
                 </tr>
               ))}
             </tbody>
@@ -188,9 +213,9 @@ export default function TeamPage() {
             <table className="text-xs">
               <thead>
                 <tr>
-                  <th className="text-left py-1 px-2 text-text-muted font-medium sticky left-0 bg-surface min-w-[140px]">Team Member</th>
+                  <th className="text-left py-1 px-2 text-[#64748B] font-medium sticky left-0 bg-[#1E293B] min-w-[140px]">Team Member</th>
                   {facilities.map((f) => (
-                    <th key={f} className="py-1 px-1 text-text-muted font-medium text-center" style={{ minWidth: '40px' }}>
+                    <th key={f} className="py-1 px-1 text-[#64748B] font-medium text-center" style={{ minWidth: '40px' }}>
                       <span className="block transform -rotate-45 origin-center whitespace-nowrap">{f}</span>
                     </th>
                   ))}
@@ -199,13 +224,13 @@ export default function TeamPage() {
               <tbody>
                 {teams.map((team) => (
                   <tr key={team}>
-                    <td className="py-1 px-2 text-text-secondary font-medium sticky left-0 bg-surface whitespace-nowrap">{team}</td>
+                    <td className="py-1 px-2 text-[#94A3B8] font-medium sticky left-0 bg-[#1E293B] whitespace-nowrap">{team}</td>
                     {facilities.map((facility) => {
                       const count = getCellCount(team, facility);
                       return (
                         <td key={facility} className="py-1 px-1">
                           <div
-                            className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-mono ${getHeatColor(count)} ${count > 0 ? 'text-white' : 'text-text-muted'}`}
+                            className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-mono ${getHeatColor(count)} ${count > 0 ? 'text-white' : 'text-[#64748B]'}`}
                             title={`${team} × ${facility}: ${count} issues`}
                           >
                             {count > 0 ? count : ''}
@@ -219,7 +244,7 @@ export default function TeamPage() {
             </table>
           </div>
         ) : (
-          <div className="h-[200px] flex items-center justify-center text-text-muted text-sm">
+          <div className="h-[200px] flex items-center justify-center text-[#64748B] text-sm">
             No coverage data available
           </div>
         )}
@@ -232,9 +257,9 @@ export default function TeamPage() {
             <table className="text-xs">
               <thead>
                 <tr>
-                  <th className="text-left py-1 px-2 text-text-muted font-medium sticky left-0 bg-surface min-w-[140px]">Team Member</th>
+                  <th className="text-left py-1 px-2 text-[#64748B] font-medium sticky left-0 bg-[#1E293B] min-w-[140px]">Team Member</th>
                   {monthlyActivity.allMonths.map((m) => (
-                    <th key={m} className="py-1 px-1 text-text-muted font-medium text-center min-w-[48px]">
+                    <th key={m} className="py-1 px-1 text-[#64748B] font-medium text-center min-w-[48px]">
                       {m.substring(5)}
                     </th>
                   ))}
@@ -246,12 +271,12 @@ export default function TeamPage() {
                   const teamMax = Math.max(...Array.from(teamMap.values()), 1);
                   return (
                     <tr key={team}>
-                      <td className="py-1 px-2 text-text-secondary font-medium sticky left-0 bg-surface whitespace-nowrap">{team}</td>
+                      <td className="py-1 px-2 text-[#94A3B8] font-medium sticky left-0 bg-[#1E293B] whitespace-nowrap">{team}</td>
                       {monthlyActivity.allMonths.map((month) => {
                         const count = teamMap.get(month) || 0;
                         const intensity = count / teamMax;
                         const bgClass = count === 0
-                          ? 'bg-surface-hover'
+                          ? 'bg-[#334155]'
                           : intensity < 0.25 ? 'bg-emerald-900/40'
                           : intensity < 0.5 ? 'bg-emerald-700/50'
                           : intensity < 0.75 ? 'bg-emerald-600/60'
@@ -259,7 +284,7 @@ export default function TeamPage() {
                         return (
                           <td key={month} className="py-1 px-1">
                             <div
-                              className={`w-10 h-7 rounded flex items-center justify-center text-[10px] font-mono ${bgClass} ${count > 0 ? 'text-white' : 'text-text-muted'}`}
+                              className={`w-10 h-7 rounded flex items-center justify-center text-[10px] font-mono ${bgClass} ${count > 0 ? 'text-white' : 'text-[#64748B]'}`}
                               title={`${team} — ${month}: ${count} issues`}
                             >
                               {count > 0 ? count : ''}
@@ -274,7 +299,7 @@ export default function TeamPage() {
             </table>
           </div>
         ) : (
-          <div className="h-[200px] flex items-center justify-center text-text-muted text-sm">
+          <div className="h-[200px] flex items-center justify-center text-[#64748B] text-sm">
             No activity data available
           </div>
         )}

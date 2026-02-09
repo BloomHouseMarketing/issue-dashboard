@@ -57,26 +57,26 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
       )}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-40 h-full bg-surface border-r border-border transition-all duration-300 flex flex-col',
+          'fixed top-0 left-0 z-40 h-full bg-[#1E293B] border-r border-[#334155] transition-all duration-300 flex flex-col',
           collapsed ? 'w-16' : 'w-60',
           'lg:relative lg:z-10',
           !collapsed ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-16'
         )}
       >
         {/* Logo area */}
-        <div className="h-16 flex items-center px-4 border-b border-border">
+        <div className="h-16 flex items-center px-4 border-b border-[#334155]">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#3B82F6] flex items-center justify-center">
                 <span className="text-white font-bold text-sm">MR</span>
               </div>
-              <span className="text-text-primary font-semibold text-sm">MHC Rounds</span>
+              <span className="text-[#F8FAFC] font-semibold text-sm">MHC Rounds</span>
             </div>
           )}
           <button
             onClick={onToggle}
             className={cn(
-              'p-1.5 rounded-lg hover:bg-surface-hover text-text-secondary transition-colors',
+              'p-1.5 rounded-lg hover:bg-[#334155] text-[#94A3B8] transition-colors',
               collapsed ? 'mx-auto' : 'ml-auto'
             )}
           >
@@ -101,8 +101,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-accent/10 text-accent'
-                    : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                    ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                    : 'text-[#94A3B8] hover:bg-[#334155] hover:text-[#F8FAFC]'
                 )}
                 title={collapsed ? item.label : undefined}
               >

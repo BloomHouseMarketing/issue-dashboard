@@ -8,6 +8,7 @@ export interface Filters {
   state: string | null;
   shift: string | null;
   year: number | null;
+  issueTypes: string[];  // multi-select: 'Rounds', 'Safety', 'IT'
 }
 
 interface FilterOptions {
@@ -21,16 +22,20 @@ interface FilterOptions {
 interface FilterContextType {
   filters: Filters;
   filterOptions: FilterOptions;
-  setFilter: (key: keyof Filters, value: string | number | null) => void;
+  setFilter: (key: keyof Filters, value: string | number | string[] | null) => void;
+  toggleIssueType: (type: string) => void;
   resetFilters: () => void;
   hasActiveFilters: boolean;
 }
+
+const ISSUE_TYPES = ['Rounds', 'Safety', 'IT'];
 
 const defaultFilters: Filters = {
   facility: null,
   state: null,
   shift: null,
   year: null,
+  issueTypes: [],
 };
 
 const defaultOptions: FilterOptions = {
@@ -45,6 +50,7 @@ const FilterContext = createContext<FilterContextType>({
   filters: defaultFilters,
   filterOptions: defaultOptions,
   setFilter: () => {},
+  toggleIssueType: () => {},
   resetFilters: () => {},
   hasActiveFilters: false,
 });
@@ -69,16 +75,31 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     fetchOptions();
   }, []);
 
-  const setFilter = (key: keyof Filters, value: string | number | null) => {
+  const setFilter = (key: keyof Filters, value: string | number | string[] | null) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const toggleIssueType = (type: string) => {
+    setFilters((prev) => {
+      const current = prev.issueTypes;
+      const next = current.includes(type)
+        ? current.filter((t) => t !== type)
+        : [...current, type];
+      return { ...prev, issueTypes: next };
+    });
   };
 
   const resetFilters = () => setFilters(defaultFilters);
 
-  const hasActiveFilters = Object.values(filters).some((v) => v !== null);
+  const hasActiveFilters =
+    filters.facility !== null ||
+    filters.state !== null ||
+    filters.shift !== null ||
+    filters.year !== null ||
+    filters.issueTypes.length > 0;
 
   return (
-    <FilterContext.Provider value={{ filters, filterOptions, setFilter, resetFilters, hasActiveFilters }}>
+    <FilterContext.Provider value={{ filters, filterOptions, setFilter, toggleIssueType, resetFilters, hasActiveFilters }}>
       {children}
     </FilterContext.Provider>
   );
@@ -87,3 +108,5 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 export function useFilters() {
   return useContext(FilterContext);
 }
+
+export { ISSUE_TYPES };
