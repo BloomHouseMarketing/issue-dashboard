@@ -4,8 +4,8 @@ import { FilterProvider } from '@/components/providers/FilterProvider';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export const metadata: Metadata = {
-  title: 'MHC Rounds Dashboard',
-  description: 'Healthcare facility rounds monitoring dashboard',
+  title: 'Careview Reporting',
+  description: 'Healthcare facility reporting dashboard',
 };
 
 export default function RootLayout({

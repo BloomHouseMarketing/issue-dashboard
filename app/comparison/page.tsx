@@ -7,7 +7,6 @@ import ChartCard from '@/components/ui/ChartCard';
 import ComparisonBarChart from '@/components/charts/ComparisonBarChart';
 import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import { formatNumber, formatPercent, getChangeColor, getChangeBgColor, getChangeArrow } from '@/lib/utils';
-import { FACILITY_STATES } from '@/lib/constants';
 import { SHORT_MONTH_NAMES } from '@/lib/constants';
 
 interface MonthComparison {
@@ -91,9 +90,7 @@ export default function ComparisonPage() {
       // Per-facility comparisons
       const facilities = filters.facility
         ? [filters.facility]
-        : (filterOptions.facilities || []).filter((f: string) =>
-            !filters.state || FACILITY_STATES[f] === filters.state
-          );
+        : (filterOptions.facilities || []);
 
       const facilityPromises = facilities.map(async (facility: string) => {
         const { data } = await supabase.rpc('get_month_comparison', {
@@ -114,7 +111,7 @@ export default function ComparisonPage() {
     }
 
     fetchData();
-  }, [yearA, monthA, yearB, monthB, filters.facility, filters.state, filterOptions.facilities]);
+  }, [yearA, monthA, yearB, monthB, filters.facility, filterOptions.facilities]);
 
   const years = filterOptions.years?.length ? filterOptions.years : [2024, 2025, 2026];
 

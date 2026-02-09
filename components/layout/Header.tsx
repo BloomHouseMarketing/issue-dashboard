@@ -42,7 +42,7 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
           </svg>
         </button>
         <h1 className="text-lg font-semibold text-[#F8FAFC] hidden sm:block">
-          Rounds Monitoring Dashboard
+          Careview Reporting
         </h1>
       </div>
 
