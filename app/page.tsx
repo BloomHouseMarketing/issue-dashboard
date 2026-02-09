@@ -63,7 +63,7 @@ const SYNC_COLUMNS: ColumnDef[] = [
 ];
 
 export default function OverviewPage() {
-  const { filters } = useFilters();
+  const { filters, filterOptions } = useFilters();
   const [totalIssues, setTotalIssues] = useState(0);
   const [facilitiesCount, setFacilitiesCount] = useState(0);
   const [roundsCount, setRoundsCount] = useState(0);
@@ -93,25 +93,28 @@ export default function OverviewPage() {
         query = query.eq('shift', filters.shift);
       }
 
-      // Status filter
-      if (filters.statuses.length > 0) {
-        query = query.in('issue_status', filters.statuses);
-      }
-
-      // Year + Month date range filter
-      if (filters.year && filters.month) {
-        const startDate = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`;
-        const endMonth = filters.month === 12 ? 1 : filters.month + 1;
-        const endYear = filters.month === 12 ? filters.year + 1 : filters.year;
+      // Year + Month range date filter
+      if (filters.year && filters.monthFrom && filters.monthTo) {
+        // Year + full month range
+        const startDate = `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`;
+        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
+        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
         const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
         query = query.gte('round_date', startDate).lt('round_date', endDate);
+      } else if (filters.year && filters.monthFrom) {
+        // Year + from month only (from that month to end of year)
+        const startDate = `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`;
+        query = query.gte('round_date', startDate).lt('round_date', `${filters.year + 1}-01-01`);
+      } else if (filters.year && filters.monthTo) {
+        // Year + to month only (from start of year to end of that month)
+        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
+        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
+        const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', endDate);
       } else if (filters.year) {
         query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${filters.year + 1}-01-01`);
-      } else if (filters.month) {
-        // Month without year — use the month text column (JAN, FEB, etc.)
-        const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-        query = query.eq('month', monthNames[filters.month - 1]);
       }
+      // Month range without year — filter client-side using round_date month extraction
 
       // Issue type filter — include rows that have at least one selected type
       if (filters.issueTypes.length > 0) {
@@ -124,6 +127,28 @@ export default function OverviewPage() {
         }
       }
 
+      // Issue sub-type filter — match specific values across rounds_issue, safety_issue, it_issue
+      if (filters.issueSubTypes.length > 0) {
+        // Determine which columns each sub-type belongs to
+        const roundsSubTypes = filters.issueSubTypes.filter((s) => filterOptions.roundsIssues.includes(s));
+        const safetySubTypes = filters.issueSubTypes.filter((s) => filterOptions.safetyIssues.includes(s));
+        const itSubTypes = filters.issueSubTypes.filter((s) => filterOptions.itIssues.includes(s));
+
+        const orConditions: string[] = [];
+        if (roundsSubTypes.length > 0) {
+          orConditions.push(`rounds_issue.in.(${roundsSubTypes.join(',')})`);
+        }
+        if (safetySubTypes.length > 0) {
+          orConditions.push(`safety_issue.in.(${safetySubTypes.join(',')})`);
+        }
+        if (itSubTypes.length > 0) {
+          orConditions.push(`it_issue.in.(${itSubTypes.join(',')})`);
+        }
+        if (orConditions.length > 0) {
+          query = query.or(orConditions.join(','));
+        }
+      }
+
       // Fetch issues + sync log in parallel
       const [issuesRes, syncRes] = await Promise.all([
         query,
@@ -131,7 +156,21 @@ export default function OverviewPage() {
       ]);
 
       if (issuesRes.data) {
-        const issues = issuesRes.data as IssueRow[];
+        let issues = issuesRes.data as IssueRow[];
+
+        // Client-side month range filter when no year is set
+        if (!filters.year && (filters.monthFrom || filters.monthTo)) {
+          issues = issues.filter((issue) => {
+            if (!issue.round_date) return false;
+            const m = parseInt(issue.round_date.substring(5, 7));
+            if (filters.monthFrom && filters.monthTo) {
+              return m >= filters.monthFrom && m <= filters.monthTo;
+            }
+            if (filters.monthFrom) return m >= filters.monthFrom;
+            if (filters.monthTo) return m <= filters.monthTo;
+            return true;
+          });
+        }
 
         // Compute stats
         setTotalIssues(issues.length);
@@ -222,7 +261,7 @@ export default function OverviewPage() {
     }
 
     fetchData();
-  }, [filters]);
+  }, [filters, filterOptions.roundsIssues, filterOptions.safetyIssues, filterOptions.itIssues]);
 
   // Issue type donut data
   const issueTypeData = [
