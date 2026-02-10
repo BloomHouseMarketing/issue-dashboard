@@ -66,9 +66,10 @@ export default function IssueTypeDonut({ data }: Props) {
                 backgroundColor: '#1E293B',
                 border: '1px solid #334155',
                 borderRadius: '8px',
-                color: '#F8FAFC',
                 fontSize: '12px',
               }}
+              itemStyle={{ color: '#F8FAFC' }}
+              labelStyle={{ color: '#F8FAFC' }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [formatNumber(Number(value)), 'Issues']}
             />
