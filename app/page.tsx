@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, PAGE_SIZE } from '@/lib/supabase';
 import { useFilters, ISSUE_TYPES } from '@/components/providers/FilterProvider';
 import { ISSUE_TYPE_COLORS, ALL_FACILITIES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
@@ -107,25 +107,35 @@ export default function OverviewPage() {
         if (orConds.length > 0) query = query.or(orConds.join(','));
       }
 
-      const [issuesRes, syncRes] = await Promise.all([
-        query,
-        supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5),
-      ]);
-
-      if (issuesRes.data) {
-        let rows = issuesRes.data as IssueRow[];
-        if (!filters.year && (filters.monthFrom || filters.monthTo)) {
-          rows = rows.filter((r) => {
-            if (!r.round_date) return false;
-            const m = parseInt(r.round_date.substring(5, 7));
-            if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
-            if (filters.monthFrom) return m >= filters.monthFrom;
-            if (filters.monthTo) return m <= filters.monthTo;
-            return true;
-          });
+      // Fetch all issue rows (paginate past the 1000-row default limit)
+      const allRows: IssueRow[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data } = await query.range(from, from + PAGE_SIZE - 1);
+        if (data && data.length > 0) {
+          allRows.push(...(data as IssueRow[]));
+          hasMore = data.length === PAGE_SIZE;
+          from += PAGE_SIZE;
+        } else {
+          hasMore = false;
         }
-        setIssues(rows);
       }
+
+      const syncRes = await supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5);
+
+      let rows = allRows;
+      if (!filters.year && (filters.monthFrom || filters.monthTo)) {
+        rows = rows.filter((r) => {
+          if (!r.round_date) return false;
+          const m = parseInt(r.round_date.substring(5, 7));
+          if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
+          if (filters.monthFrom) return m >= filters.monthFrom;
+          if (filters.monthTo) return m <= filters.monthTo;
+          return true;
+        });
+      }
+      setIssues(rows);
 
       if (syncRes.data) setSyncLog(syncRes.data);
       setLoading(false);
@@ -242,8 +252,27 @@ export default function OverviewPage() {
       .map((d) => ({ ...d, label: yearMonthToLabel(d.year_month) }));
   }, [issues, useSubTypeMode, filters.issueSubTypes]);
 
-  // ---- ROW 2 LEFT: Pie chart (issue type distribution) ----
-  const issueTypeData = useMemo(() => {
+  // ---- ROW 2 LEFT: Pie chart ----
+  // Default = issue types (Rounds/Safety/IT). When sub-types selected, show sub-type breakdown.
+  const pieChartData = useMemo(() => {
+    if (useSubTypeMode) {
+      // Count each selected sub-type across all (or selected) facilities
+      const subCounts = new Map<string, number>();
+      filters.issueSubTypes.forEach((st) => subCounts.set(st, 0));
+      issues.forEach((issue) => {
+        getSubTypes(issue).forEach((sub) => {
+          if (subCounts.has(sub)) {
+            subCounts.set(sub, subCounts.get(sub)! + 1);
+          }
+        });
+      });
+      return filters.issueSubTypes.map((st, i) => ({
+        name: st,
+        value: subCounts.get(st) || 0,
+        color: SUB_TYPE_PALETTE[i % SUB_TYPE_PALETTE.length],
+      }));
+    }
+    // Default: issue types
     const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
     const items = [
       { name: 'Rounds', value: roundsCount, color: ISSUE_TYPE_COLORS.Rounds },
@@ -251,7 +280,7 @@ export default function OverviewPage() {
       { name: 'IT', value: itCount, color: ISSUE_TYPE_COLORS.IT },
     ];
     return items.filter((d) => activeTypes.includes(d.name));
-  }, [filters.issueTypes, roundsCount, safetyCount, itCount]);
+  }, [useSubTypeMode, filters.issueSubTypes, filters.issueTypes, issues, roundsCount, safetyCount, itCount]);
 
   // ---- ROW 2 RIGHT: Facility breakdown ----
   // Default = issue types. Sub-types only when filter active.
@@ -339,8 +368,8 @@ export default function OverviewPage() {
 
       {/* Row 2: Issue Type Distribution (pie) + Facility Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Issue Type Distribution" loading={loading}>
-          <IssueTypeDonut data={issueTypeData} />
+        <ChartCard title={useSubTypeMode ? 'Issue Sub-Type Distribution' : 'Issue Type Distribution'} loading={loading}>
+          <IssueTypeDonut data={pieChartData} />
         </ChartCard>
         <ChartCard title="Facility Breakdown" loading={loading}>
           <FacilitySubTypeChart data={facilityBreakdownData} series={facilityBreakdownSeries} />
