@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { fetchFacilityData, fetchIssues } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { useFilters } from '@/components/providers/FilterProvider';
 import StatCard from '@/components/ui/StatCard';
 import ChartCard from '@/components/ui/ChartCard';
@@ -121,45 +121,54 @@ export default function FacilityPage() {
   useEffect(() => {
     if (!selectedFacility) return;
 
-    async function loadData() {
+    async function fetchData() {
       setLoading(true);
-      try {
-        const res = await fetchFacilityData(selectedFacility, filters.year);
-        if (res.stats) setStats(res.stats);
-        if (res.groups) setGroups(res.groups);
-        if (res.staff) setStaff(res.staff);
 
-        if (res.trend) {
-          // Aggregate by year_month for this facility
-          const monthMap = new Map<string, { total: number; rounds: number; safety: number; it: number }>();
-          (res.trend as TrendData[]).forEach((row) => {
-            const existing = monthMap.get(row.year_month) || { total: 0, rounds: 0, safety: 0, it: 0 };
-            existing.total += Number(row.total_issues);
-            existing.rounds += Number(row.rounds_count);
-            existing.safety += Number(row.safety_count);
-            existing.it += Number(row.it_count);
-            monthMap.set(row.year_month, existing);
-          });
+      const [statsRes, groupsRes, trendRes, staffRes] = await Promise.all([
+        supabase.rpc('get_dashboard_stats', {
+          p_facility: selectedFacility,
+          p_group_name: null,
+          p_year: filters.year,
+          p_month: null,
+        }),
+        supabase.from('v_group_breakdown').select('*').eq('facility', selectedFacility).order('issue_count', { ascending: false }),
+        supabase.from('v_monthly_trend').select('facility, year_month, total_issues, rounds_count, safety_count, it_count').eq('facility', selectedFacility),
+        supabase.from('v_staff_summary').select('*').eq('facility', selectedFacility).order('total_issues', { ascending: false }),
+      ]);
 
-          const aggregated = Array.from(monthMap.entries())
-            .map(([ym, counts]) => ({
-              facility: selectedFacility,
-              year_month: ym,
-              total_issues: counts.total,
-              rounds_count: counts.rounds,
-              safety_count: counts.safety,
-              it_count: counts.it,
-            }))
-            .sort((a, b) => a.year_month.localeCompare(b.year_month));
-          setTrendData(aggregated);
-        }
-      } catch (err) {
-        console.error('Failed to fetch facility data:', err);
+      if (statsRes.data) setStats(statsRes.data);
+      if (groupsRes.data) setGroups(groupsRes.data);
+      if (staffRes.data) setStaff(staffRes.data);
+
+      if (trendRes.data) {
+        // Aggregate by year_month for this facility
+        const monthMap = new Map<string, { total: number; rounds: number; safety: number; it: number }>();
+        (trendRes.data as TrendData[]).forEach((row) => {
+          const existing = monthMap.get(row.year_month) || { total: 0, rounds: 0, safety: 0, it: 0 };
+          existing.total += Number(row.total_issues);
+          existing.rounds += Number(row.rounds_count);
+          existing.safety += Number(row.safety_count);
+          existing.it += Number(row.it_count);
+          monthMap.set(row.year_month, existing);
+        });
+
+        const aggregated = Array.from(monthMap.entries())
+          .map(([ym, counts]) => ({
+            facility: selectedFacility,
+            year_month: ym,
+            total_issues: counts.total,
+            rounds_count: counts.rounds,
+            safety_count: counts.safety,
+            it_count: counts.it,
+          }))
+          .sort((a, b) => a.year_month.localeCompare(b.year_month));
+        setTrendData(aggregated);
       }
+
       setLoading(false);
     }
 
-    loadData();
+    fetchData();
     setPage(0);
   }, [selectedFacility, filters.year]);
 
@@ -167,27 +176,35 @@ export default function FacilityPage() {
   useEffect(() => {
     if (!selectedFacility) return;
 
-    async function loadIssues() {
-      try {
-        const res = await fetchIssues({
-          fields: 'id, round_date, group_name, shift, issue_status, rounds_issue, safety_issue, it_issue, staff_name, result_status, item_name, issue_note',
-          facility: selectedFacility,
-          issueTypes: filters.issueTypes,
-          search,
-          orderBy: 'round_date',
-          orderAsc: false,
-          page,
-          pageSize,
-          countOnly: true,
-        });
-        if (res.data) setIssues(res.data);
-        if (res.count !== null && res.count !== undefined) setIssueCount(res.count);
-      } catch (err) {
-        console.error('Failed to fetch facility issues:', err);
+    async function fetchIssues() {
+      let query = supabase
+        .from('issues')
+        .select('id, round_date, group_name, shift, issue_status, rounds_issue, safety_issue, it_issue, staff_name, result_status, item_name, issue_note', { count: 'exact' })
+        .eq('facility', selectedFacility)
+        .order('round_date', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (search) {
+        query = query.or(`item_name.ilike.%${search}%,issue_note.ilike.%${search}%`);
       }
+
+      // Apply issue type filter from global filters
+      if (filters.issueTypes.length > 0) {
+        const typeConditions: string[] = [];
+        if (filters.issueTypes.includes('Rounds')) typeConditions.push('rounds_issue.not.is.null');
+        if (filters.issueTypes.includes('Safety')) typeConditions.push('safety_issue.not.is.null');
+        if (filters.issueTypes.includes('IT')) typeConditions.push('it_issue.not.is.null');
+        if (typeConditions.length > 0) {
+          query = query.or(typeConditions.join(','));
+        }
+      }
+
+      const { data, count } = await query;
+      if (data) setIssues(data);
+      if (count !== null) setIssueCount(count);
     }
 
-    loadIssues();
+    fetchIssues();
   }, [selectedFacility, page, search, filters.issueTypes]);
 
   const sortedGroups = useMemo(() => {
