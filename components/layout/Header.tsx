@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { fetchSyncLog } from '@/lib/api';
 import { timeAgo, getSyncStatusColor } from '@/lib/utils';
 
 interface SyncInfo {
@@ -14,16 +14,15 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const [sync, setSync] = useState<SyncInfo | null>(null);
 
   useEffect(() => {
-    async function fetchSync() {
-      const { data } = await supabase
-        .from('sync_log')
-        .select('status, items_synced, completed_at')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      if (data) setSync(data);
+    async function loadSync() {
+      try {
+        const data = await fetchSyncLog();
+        if (data && data.length > 0) setSync(data[0]);
+      } catch (err) {
+        console.error('Failed to fetch sync status:', err);
+      }
     }
-    fetchSync();
+    loadSync();
   }, []);
 
   const minutesAgo = sync?.completed_at

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { supabase, PAGE_SIZE } from '@/lib/supabase';
+import { fetchTeamData } from '@/lib/api';
 import { useFilters } from '@/components/providers/FilterProvider';
 import ChartCard from '@/components/ui/ChartCard';
 import StatCard from '@/components/ui/StatCard';
@@ -49,82 +49,44 @@ export default function TeamPage() {
   const col = (key: string) => teamCols.includes(key);
 
   useEffect(() => {
-    async function fetchData() {
+    async function loadData() {
       setLoading(true);
+      try {
+        const { team, heatmapRows, activityRows } = await fetchTeamData();
+        setTeamData(team);
 
-      const teamRes = await supabase.from('v_monitoring_team').select('*').order('issues_reported', { ascending: false });
-      if (teamRes.data) setTeamData(teamRes.data);
-
-      // Fetch all heatmap rows (paginate past 1000-row limit)
-      const heatmapRows: { live_monitoring_team: string; facility: string }[] = [];
-      let hmFrom = 0;
-      let hmMore = true;
-      while (hmMore) {
-        const { data } = await supabase.from('issues')
-          .select('live_monitoring_team, facility')
-          .not('live_monitoring_team', 'is', null)
-          .range(hmFrom, hmFrom + PAGE_SIZE - 1);
-        if (data && data.length > 0) {
-          heatmapRows.push(...data);
-          hmMore = data.length === PAGE_SIZE;
-          hmFrom += PAGE_SIZE;
-        } else {
-          hmMore = false;
-        }
-      }
-
-      // Fetch all activity rows (paginate past 1000-row limit)
-      const activityRows: { live_monitoring_team: string; round_date: string }[] = [];
-      let actFrom = 0;
-      let actMore = true;
-      while (actMore) {
-        const { data } = await supabase.from('issues')
-          .select('live_monitoring_team, round_date')
-          .not('live_monitoring_team', 'is', null)
-          .not('round_date', 'is', null)
-          .order('round_date', { ascending: true })
-          .range(actFrom, actFrom + PAGE_SIZE - 1);
-        if (data && data.length > 0) {
-          activityRows.push(...data);
-          actMore = data.length === PAGE_SIZE;
-          actFrom += PAGE_SIZE;
-        } else {
-          actMore = false;
-        }
-      }
-
-      // Aggregate heatmap data (team x facility → count)
-      {
+        // Aggregate heatmap data (team x facility -> count)
         const cellMap = new Map<string, number>();
-        heatmapRows.forEach((row) => {
+        heatmapRows.forEach((row: { live_monitoring_team: string; facility: string }) => {
           const key = `${row.live_monitoring_team}|||${row.facility}`;
           cellMap.set(key, (cellMap.get(key) || 0) + 1);
         });
-        const cells = Array.from(cellMap.entries()).map(([key, count]) => {
-          const [team, facility] = key.split('|||');
-          return { live_monitoring_team: team, facility, count };
-        });
-        setHeatmapData(cells);
-      }
+        setHeatmapData(
+          Array.from(cellMap.entries()).map(([key, count]) => {
+            const [team, facility] = key.split('|||');
+            return { live_monitoring_team: team, facility, count };
+          })
+        );
 
-      // Aggregate activity data (team x date → count)
-      {
+        // Aggregate activity data (team x date -> count)
         const dayMap = new Map<string, number>();
-        activityRows.forEach((row) => {
+        activityRows.forEach((row: { live_monitoring_team: string; round_date: string }) => {
           const key = `${row.live_monitoring_team}|||${row.round_date}`;
           dayMap.set(key, (dayMap.get(key) || 0) + 1);
         });
-        const days = Array.from(dayMap.entries()).map(([key, count]) => {
-          const [team, date] = key.split('|||');
-          return { live_monitoring_team: team, round_date: date, count };
-        });
-        setActivityData(days);
+        setActivityData(
+          Array.from(dayMap.entries()).map(([key, count]) => {
+            const [team, date] = key.split('|||');
+            return { live_monitoring_team: team, round_date: date, count };
+          })
+        );
+      } catch (err) {
+        console.error('Failed to fetch team data:', err);
       }
-
       setLoading(false);
     }
 
-    fetchData();
+    loadData();
   }, [filters]);
 
   // Heatmap computation
