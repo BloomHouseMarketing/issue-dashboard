@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { fetchIssues, fetchSyncLog } from '@/lib/api';
+import { supabase, PAGE_SIZE } from '@/lib/supabase';
 import { useFilters, ISSUE_TYPES } from '@/components/providers/FilterProvider';
 import { ISSUE_TYPE_COLORS, ALL_FACILITIES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
@@ -61,44 +61,83 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [syncCols, setSyncCols] = useState(SYNC_COLUMNS.map((c) => c.key));
 
-  // Fetch data via server-side API routes
+  // Fetch data
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      try {
-        const [issuesRes, syncData] = await Promise.all([
-          fetchIssues({
-            facility: filters.facility,
-            shift: filters.shift,
-            year: filters.year,
-            monthFrom: filters.monthFrom,
-            monthTo: filters.monthTo,
-            issueTypes: filters.issueTypes,
-            issueSubTypes: filters.issueSubTypes,
-            roundsIssues: filterOptions.roundsIssues,
-            safetyIssues: filterOptions.safetyIssues,
-            itIssues: filterOptions.itIssues,
-          }),
-          fetchSyncLog(),
-        ]);
 
-        let rows = (issuesRes.data || []) as IssueRow[];
-        // Client-side month filtering when no year is selected
-        if (!filters.year && (filters.monthFrom || filters.monthTo)) {
-          rows = rows.filter((r) => {
-            if (!r.round_date) return false;
-            const m = parseInt(r.round_date.substring(5, 7));
-            if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
-            if (filters.monthFrom) return m >= filters.monthFrom;
-            if (filters.monthTo) return m <= filters.monthTo;
-            return true;
-          });
-        }
-        setIssues(rows);
-        setSyncLog(syncData || []);
-      } catch (err) {
-        console.error('Failed to fetch overview data:', err);
+      let query = supabase
+        .from('issues')
+        .select('facility, round_date, shift, issue_status, rounds_issue, safety_issue, it_issue, group_name, staff_name');
+
+      if (filters.facility) query = query.eq('facility', filters.facility);
+      if (filters.shift) query = query.eq('shift', filters.shift);
+
+      if (filters.year && filters.monthFrom && filters.monthTo) {
+        const startDate = `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`;
+        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
+        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
+        query = query.gte('round_date', startDate).lt('round_date', `${endYear}-${String(endMonth).padStart(2, '0')}-01`);
+      } else if (filters.year && filters.monthFrom) {
+        query = query.gte('round_date', `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`).lt('round_date', `${filters.year + 1}-01-01`);
+      } else if (filters.year && filters.monthTo) {
+        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
+        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
+        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${endYear}-${String(endMonth).padStart(2, '0')}-01`);
+      } else if (filters.year) {
+        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${filters.year + 1}-01-01`);
       }
+
+      if (filters.issueTypes.length > 0) {
+        const conds: string[] = [];
+        if (filters.issueTypes.includes('Rounds')) conds.push('rounds_issue.not.is.null');
+        if (filters.issueTypes.includes('Safety')) conds.push('safety_issue.not.is.null');
+        if (filters.issueTypes.includes('IT')) conds.push('it_issue.not.is.null');
+        if (conds.length > 0) query = query.or(conds.join(','));
+      }
+
+      if (filters.issueSubTypes.length > 0) {
+        const roundsSubs = filters.issueSubTypes.filter((s) => filterOptions.roundsIssues.includes(s));
+        const safetySubs = filters.issueSubTypes.filter((s) => filterOptions.safetyIssues.includes(s));
+        const itSubs = filters.issueSubTypes.filter((s) => filterOptions.itIssues.includes(s));
+        const orConds: string[] = [];
+        if (roundsSubs.length > 0) orConds.push(`rounds_issue.in.(${roundsSubs.join(',')})`);
+        if (safetySubs.length > 0) orConds.push(`safety_issue.in.(${safetySubs.join(',')})`);
+        if (itSubs.length > 0) orConds.push(`it_issue.in.(${itSubs.join(',')})`);
+        if (orConds.length > 0) query = query.or(orConds.join(','));
+      }
+
+      // Fetch all issue rows (paginate past the 1000-row default limit)
+      const allRows: IssueRow[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data } = await query.range(from, from + PAGE_SIZE - 1);
+        if (data && data.length > 0) {
+          allRows.push(...(data as IssueRow[]));
+          hasMore = data.length === PAGE_SIZE;
+          from += PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const syncRes = await supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5);
+
+      let rows = allRows;
+      if (!filters.year && (filters.monthFrom || filters.monthTo)) {
+        rows = rows.filter((r) => {
+          if (!r.round_date) return false;
+          const m = parseInt(r.round_date.substring(5, 7));
+          if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
+          if (filters.monthFrom) return m >= filters.monthFrom;
+          if (filters.monthTo) return m <= filters.monthTo;
+          return true;
+        });
+      }
+      setIssues(rows);
+
+      if (syncRes.data) setSyncLog(syncRes.data);
       setLoading(false);
     }
     fetchData();
