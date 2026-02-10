@@ -78,6 +78,24 @@ export default function StackedBarTrendChart({ data, series }: Props) {
               stackId="stack"
               fill={s.color}
               animationDuration={300}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              label={(props: any) => {
+                const { x, y, width, height, value } = props;
+                if (!value || height < 18) return null;
+                return (
+                  <text
+                    x={x + width / 2}
+                    y={y + height / 2}
+                    fill="#F8FAFC"
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={11}
+                    fontWeight={600}
+                  >
+                    {formatNumber(value)}
+                  </text>
+                );
+              }}
             />
           ))}
           {/* Remainder fills up to total (semi-transparent top) */}
