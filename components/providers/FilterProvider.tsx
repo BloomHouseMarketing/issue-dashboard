@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { fetchFilterOptions } from '@/lib/api';
 
 export interface Filters {
   facility: string | null;
@@ -72,24 +72,26 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(defaultOptions);
 
   useEffect(() => {
-    async function fetchOptions() {
-      // Fetch filter options from RPC (includes rounds_issues, safety_issues, it_issues)
-      const { data } = await supabase.rpc('get_filter_options');
-
-      if (data) {
-        setFilterOptions({
-          facilities: data.facilities || [],
-          shifts: data.shifts || [],
-          years: data.years || [],
-          groups: data.groups || [],
-          monitoring_team: data.monitoring_team || [],
-          roundsIssues: data.rounds_issues || [],
-          safetyIssues: data.safety_issues || [],
-          itIssues: data.it_issues || [],
-        });
+    async function loadOptions() {
+      try {
+        const data = await fetchFilterOptions();
+        if (data) {
+          setFilterOptions({
+            facilities: data.facilities || [],
+            shifts: data.shifts || [],
+            years: data.years || [],
+            groups: data.groups || [],
+            monitoring_team: data.monitoring_team || [],
+            roundsIssues: data.rounds_issues || [],
+            safetyIssues: data.safety_issues || [],
+            itIssues: data.it_issues || [],
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load filter options:', err);
       }
     }
-    fetchOptions();
+    loadOptions();
   }, []);
 
   const setFilter = (key: keyof Filters, value: string | number | string[] | null) => {
