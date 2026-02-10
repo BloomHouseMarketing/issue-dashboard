@@ -1,11 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Server-only: these env vars have no NEXT_PUBLIC_ prefix,
-// so they are never bundled into the client-side JS.
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rbcyxdfknuvyigwdxatt.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiY3l4ZGZrbnV2eWlnd2R4YXR0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDQ4ODE4MiwiZXhwIjoyMDg2MDY0MTgyfQ.if74wMfkd5QIQlDpEEnDB0np0GJh8GyAQEFE6uOMg0U';
 
-export const supabase = createClient(supabaseUrl, supabaseServiceKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /** Supabase PostgREST default limit is 1000 rows. Use this constant for pagination. */
 export const PAGE_SIZE = 1000;
