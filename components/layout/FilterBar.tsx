@@ -8,8 +8,12 @@ export default function FilterBar() {
   const { filters, filterOptions, setFilter, toggleIssueType, toggleIssueSubType, resetFilters, hasActiveFilters } = useFilters();
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
   const [subTypeDropdownOpen, setSubTypeDropdownOpen] = useState(false);
+  const [monthFromOpen, setMonthFromOpen] = useState(false);
+  const [monthToOpen, setMonthToOpen] = useState(false);
   const issueDropdownRef = useRef<HTMLDivElement>(null);
   const subTypeDropdownRef = useRef<HTMLDivElement>(null);
+  const monthFromRef = useRef<HTMLDivElement>(null);
+  const monthToRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -19,6 +23,12 @@ export default function FilterBar() {
       }
       if (subTypeDropdownRef.current && !subTypeDropdownRef.current.contains(e.target as Node)) {
         setSubTypeDropdownOpen(false);
+      }
+      if (monthFromRef.current && !monthFromRef.current.contains(e.target as Node)) {
+        setMonthFromOpen(false);
+      }
+      if (monthToRef.current && !monthToRef.current.contains(e.target as Node)) {
+        setMonthToOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -103,30 +113,100 @@ export default function FilterBar() {
           ))}
         </select>
 
-        {/* Month Range: From */}
-        <div className="flex items-center gap-1">
-          <select
-            value={filters.monthFrom || ''}
-            onChange={(e) => setFilter('monthFrom', e.target.value ? parseInt(e.target.value) : null)}
-            className={selectClass}
+        {/* Month From — custom dropdown */}
+        <div className="relative" ref={monthFromRef}>
+          <button
+            onClick={() => { setMonthFromOpen(!monthFromOpen); setMonthToOpen(false); }}
+            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[120px]"
           >
-            <option value="">From Month</option>
-            {SHORT_MONTH_NAMES.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
-            ))}
-          </select>
-          <span className="text-[#64748B] text-xs">–</span>
-          {/* Month Range: To */}
-          <select
-            value={filters.monthTo || ''}
-            onChange={(e) => setFilter('monthTo', e.target.value ? parseInt(e.target.value) : null)}
-            className={selectClass}
+            <span>{filters.monthFrom ? SHORT_MONTH_NAMES[filters.monthFrom - 1] : 'From Month'}</span>
+            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${monthFromOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+          {monthFromOpen && (
+            <div className="absolute top-full left-0 mt-1 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-50 p-2 w-[220px]">
+              <div className="grid grid-cols-3 gap-1">
+                {SHORT_MONTH_NAMES.map((m, i) => {
+                  const monthNum = i + 1;
+                  const isSelected = filters.monthFrom === monthNum;
+                  const isInRange = filters.monthFrom && filters.monthTo && monthNum >= filters.monthFrom && monthNum <= filters.monthTo;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => { setFilter('monthFrom', monthNum); setMonthFromOpen(false); }}
+                      className={`px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        isSelected
+                          ? 'bg-[#3B82F6] text-white'
+                          : isInRange
+                            ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
+                            : 'text-[#F8FAFC] hover:bg-[#334155]'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+              {filters.monthFrom && (
+                <button
+                  onClick={() => { setFilter('monthFrom', null); setMonthFromOpen(false); }}
+                  className="w-full mt-2 pt-2 border-t border-[#334155] text-xs text-[#94A3B8] hover:text-[#F8FAFC] transition-colors text-left px-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <span className="text-[#64748B] text-xs">–</span>
+
+        {/* Month To — custom dropdown */}
+        <div className="relative" ref={monthToRef}>
+          <button
+            onClick={() => { setMonthToOpen(!monthToOpen); setMonthFromOpen(false); }}
+            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[120px]"
           >
-            <option value="">To Month</option>
-            {SHORT_MONTH_NAMES.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
-            ))}
-          </select>
+            <span>{filters.monthTo ? SHORT_MONTH_NAMES[filters.monthTo - 1] : 'To Month'}</span>
+            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${monthToOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+          {monthToOpen && (
+            <div className="absolute top-full left-0 mt-1 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-50 p-2 w-[220px]">
+              <div className="grid grid-cols-3 gap-1">
+                {SHORT_MONTH_NAMES.map((m, i) => {
+                  const monthNum = i + 1;
+                  const isSelected = filters.monthTo === monthNum;
+                  const isInRange = filters.monthFrom && filters.monthTo && monthNum >= filters.monthFrom && monthNum <= filters.monthTo;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => { setFilter('monthTo', monthNum); setMonthToOpen(false); }}
+                      className={`px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        isSelected
+                          ? 'bg-[#3B82F6] text-white'
+                          : isInRange
+                            ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
+                            : 'text-[#F8FAFC] hover:bg-[#334155]'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+              {filters.monthTo && (
+                <button
+                  onClick={() => { setFilter('monthTo', null); setMonthToOpen(false); }}
+                  className="w-full mt-2 pt-2 border-t border-[#334155] text-xs text-[#94A3B8] hover:text-[#F8FAFC] transition-colors text-left px-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Issue Type Multi-Select */}
