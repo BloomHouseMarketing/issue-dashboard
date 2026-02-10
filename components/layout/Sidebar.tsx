@@ -26,6 +26,7 @@ const navItems = [
   {
     label: 'Comparison',
     href: '/comparison',
+    badge: 'Soon',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
@@ -107,7 +108,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 title={collapsed ? item.label : undefined}
               >
                 {item.icon}
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && (
+                  <span className="flex items-center gap-2">
+                    {item.label}
+                    {'badge' in item && item.badge && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#8B5CF6]/20 text-[#A78BFA] border border-[#8B5CF6]/30">
+                        {item.badge}
+                      </span>
+                    )}
+                  </span>
+                )}
               </Link>
             );
           })}
