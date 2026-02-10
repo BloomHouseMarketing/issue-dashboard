@@ -80,8 +80,10 @@ export default function StackedBarTrendChart({ data, series }: Props) {
               animationDuration={300}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               label={(props: any) => {
-                const { x, y, width, height, value } = props;
-                if (!value || height < 18) return null;
+                const { x, y, width, height, index } = props;
+                const row = chartData[index] as Record<string, unknown> | undefined;
+                const actual = Number(row?.[s.key]) || 0;
+                if (!actual || height < 18) return null;
                 return (
                   <text
                     x={x + width / 2}
@@ -92,7 +94,7 @@ export default function StackedBarTrendChart({ data, series }: Props) {
                     fontSize={11}
                     fontWeight={600}
                   >
-                    {formatNumber(value)}
+                    {formatNumber(actual)}
                   </text>
                 );
               }}
