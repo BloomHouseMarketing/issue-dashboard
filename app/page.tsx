@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, PAGE_SIZE } from '@/lib/supabase';
 import { useFilters, ISSUE_TYPES } from '@/components/providers/FilterProvider';
 import { ISSUE_TYPE_COLORS, ALL_FACILITIES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
@@ -107,25 +107,35 @@ export default function OverviewPage() {
         if (orConds.length > 0) query = query.or(orConds.join(','));
       }
 
-      const [issuesRes, syncRes] = await Promise.all([
-        query,
-        supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5),
-      ]);
-
-      if (issuesRes.data) {
-        let rows = issuesRes.data as IssueRow[];
-        if (!filters.year && (filters.monthFrom || filters.monthTo)) {
-          rows = rows.filter((r) => {
-            if (!r.round_date) return false;
-            const m = parseInt(r.round_date.substring(5, 7));
-            if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
-            if (filters.monthFrom) return m >= filters.monthFrom;
-            if (filters.monthTo) return m <= filters.monthTo;
-            return true;
-          });
+      // Fetch all issue rows (paginate past the 1000-row default limit)
+      const allRows: IssueRow[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data } = await query.range(from, from + PAGE_SIZE - 1);
+        if (data && data.length > 0) {
+          allRows.push(...(data as IssueRow[]));
+          hasMore = data.length === PAGE_SIZE;
+          from += PAGE_SIZE;
+        } else {
+          hasMore = false;
         }
-        setIssues(rows);
       }
+
+      const syncRes = await supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5);
+
+      let rows = allRows;
+      if (!filters.year && (filters.monthFrom || filters.monthTo)) {
+        rows = rows.filter((r) => {
+          if (!r.round_date) return false;
+          const m = parseInt(r.round_date.substring(5, 7));
+          if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
+          if (filters.monthFrom) return m >= filters.monthFrom;
+          if (filters.monthTo) return m <= filters.monthTo;
+          return true;
+        });
+      }
+      setIssues(rows);
 
       if (syncRes.data) setSyncLog(syncRes.data);
       setLoading(false);
