@@ -252,8 +252,27 @@ export default function OverviewPage() {
       .map((d) => ({ ...d, label: yearMonthToLabel(d.year_month) }));
   }, [issues, useSubTypeMode, filters.issueSubTypes]);
 
-  // ---- ROW 2 LEFT: Pie chart (issue type distribution) ----
-  const issueTypeData = useMemo(() => {
+  // ---- ROW 2 LEFT: Pie chart ----
+  // Default = issue types (Rounds/Safety/IT). When sub-types selected, show sub-type breakdown.
+  const pieChartData = useMemo(() => {
+    if (useSubTypeMode) {
+      // Count each selected sub-type across all (or selected) facilities
+      const subCounts = new Map<string, number>();
+      filters.issueSubTypes.forEach((st) => subCounts.set(st, 0));
+      issues.forEach((issue) => {
+        getSubTypes(issue).forEach((sub) => {
+          if (subCounts.has(sub)) {
+            subCounts.set(sub, subCounts.get(sub)! + 1);
+          }
+        });
+      });
+      return filters.issueSubTypes.map((st, i) => ({
+        name: st,
+        value: subCounts.get(st) || 0,
+        color: SUB_TYPE_PALETTE[i % SUB_TYPE_PALETTE.length],
+      }));
+    }
+    // Default: issue types
     const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
     const items = [
       { name: 'Rounds', value: roundsCount, color: ISSUE_TYPE_COLORS.Rounds },
@@ -261,7 +280,7 @@ export default function OverviewPage() {
       { name: 'IT', value: itCount, color: ISSUE_TYPE_COLORS.IT },
     ];
     return items.filter((d) => activeTypes.includes(d.name));
-  }, [filters.issueTypes, roundsCount, safetyCount, itCount]);
+  }, [useSubTypeMode, filters.issueSubTypes, filters.issueTypes, issues, roundsCount, safetyCount, itCount]);
 
   // ---- ROW 2 RIGHT: Facility breakdown ----
   // Default = issue types. Sub-types only when filter active.
@@ -349,8 +368,8 @@ export default function OverviewPage() {
 
       {/* Row 2: Issue Type Distribution (pie) + Facility Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Issue Type Distribution" loading={loading}>
-          <IssueTypeDonut data={issueTypeData} />
+        <ChartCard title={useSubTypeMode ? 'Issue Sub-Type Distribution' : 'Issue Type Distribution'} loading={loading}>
+          <IssueTypeDonut data={pieChartData} />
         </ChartCard>
         <ChartCard title="Facility Breakdown" loading={loading}>
           <FacilitySubTypeChart data={facilityBreakdownData} series={facilityBreakdownSeries} />
