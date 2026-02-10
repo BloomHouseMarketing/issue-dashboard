@@ -5,6 +5,11 @@ export const STATE_COLORS: Record<string, string> = {
   Kentucky: '#8B5CF6',
 };
 
+export const ALL_FACILITIES = [
+  'OPUS', 'MHC', 'SVR', 'CAMH', 'Revival', 'Hillside',
+  'PCMH', 'LAMH', 'TNBH', 'NASH', 'Lonestar', 'Dallas', 'Kentucky',
+];
+
 export const FACILITY_COLORS: Record<string, string> = {
   OPUS: '#2563EB',
   MHC: '#3B82F6',

@@ -3,12 +3,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useFilters, ISSUE_TYPES } from '@/components/providers/FilterProvider';
-import { ISSUE_TYPE_COLORS } from '@/lib/constants';
+import { ISSUE_TYPE_COLORS, ALL_FACILITIES } from '@/lib/constants';
 import StatCard from '@/components/ui/StatCard';
 import ChartCard from '@/components/ui/ChartCard';
 import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import FacilityBarChart from '@/components/charts/FacilityBarChart';
 import DynamicTrendChart from '@/components/charts/DynamicTrendChart';
+import IssueTypeDonut from '@/components/charts/IssueTypeDonut';
 import FacilitySubTypeChart from '@/components/charts/FacilitySubTypeChart';
 import { yearMonthToLabel } from '@/lib/utils';
 
@@ -45,7 +46,6 @@ const SYNC_COLUMNS: ColumnDef[] = [
   { key: 'completed_at', label: 'Completed' },
 ];
 
-// Get all sub-type values present on an issue row
 function getSubTypes(issue: IssueRow): string[] {
   const subs: string[] = [];
   if (issue.rounds_issue) subs.push(issue.rounds_issue);
@@ -73,7 +73,6 @@ export default function OverviewPage() {
       if (filters.facility) query = query.eq('facility', filters.facility);
       if (filters.shift) query = query.eq('shift', filters.shift);
 
-      // Year + Month range
       if (filters.year && filters.monthFrom && filters.monthTo) {
         const startDate = `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`;
         const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
@@ -89,7 +88,6 @@ export default function OverviewPage() {
         query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${filters.year + 1}-01-01`);
       }
 
-      // Issue type filter
       if (filters.issueTypes.length > 0) {
         const conds: string[] = [];
         if (filters.issueTypes.includes('Rounds')) conds.push('rounds_issue.not.is.null');
@@ -98,7 +96,6 @@ export default function OverviewPage() {
         if (conds.length > 0) query = query.or(conds.join(','));
       }
 
-      // Issue sub-type filter
       if (filters.issueSubTypes.length > 0) {
         const roundsSubs = filters.issueSubTypes.filter((s) => filterOptions.roundsIssues.includes(s));
         const safetySubs = filters.issueSubTypes.filter((s) => filterOptions.safetyIssues.includes(s));
@@ -117,7 +114,6 @@ export default function OverviewPage() {
 
       if (issuesRes.data) {
         let rows = issuesRes.data as IssueRow[];
-        // Client-side month filter when no year set
         if (!filters.year && (filters.monthFrom || filters.monthTo)) {
           rows = rows.filter((r) => {
             if (!r.round_date) return false;
@@ -134,32 +130,26 @@ export default function OverviewPage() {
       if (syncRes.data) setSyncLog(syncRes.data);
       setLoading(false);
     }
-
     fetchData();
   }, [filters, filterOptions.roundsIssues, filterOptions.safetyIssues, filterOptions.itIssues]);
 
-  // All available sub-types based on active issue types
-  const allAvailableSubTypes = useMemo(() => {
-    const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
-    const all: string[] = [];
-    if (activeTypes.includes('Rounds')) all.push(...filterOptions.roundsIssues);
-    if (activeTypes.includes('Safety')) all.push(...filterOptions.safetyIssues);
-    if (activeTypes.includes('IT')) all.push(...filterOptions.itIssues);
-    return all;
-  }, [filters.issueTypes, filterOptions.roundsIssues, filterOptions.safetyIssues, filterOptions.itIssues]);
+  // Whether sub-type mode is active (user has explicitly selected sub-types)
+  const useSubTypeMode = filters.issueSubTypes.length > 0;
 
-  // Dynamic mode: sub-type lines when specific (not all) sub-types are selected
-  const useSubTypeMode = filters.issueSubTypes.length > 0 && filters.issueSubTypes.length < allAvailableSubTypes.length;
+  // Stats
+  const totalIssues = issues.length;
+  const facilitiesCount = new Set(issues.map((i) => i.facility)).size;
+  const roundsCount = issues.filter((i) => i.rounds_issue != null).length;
+  const safetyCount = issues.filter((i) => i.safety_issue != null).length;
+  const itCount = issues.filter((i) => i.it_issue != null).length;
 
-  // Series for dynamic line charts
-  const activeSubTypeSeries = useMemo(() => {
-    return filters.issueSubTypes.map((st, i) => ({
-      key: st,
-      label: st,
-      color: SUB_TYPE_PALETTE[i % SUB_TYPE_PALETTE.length],
-    }));
-  }, [filters.issueSubTypes]);
+  // Which facilities to show (all 13, or just the selected one)
+  const facilitiesToShow = useMemo(
+    () => (filters.facility ? [filters.facility] : ALL_FACILITIES),
+    [filters.facility]
+  );
 
+  // Issue type series (Rounds / Safety / IT) — for bars and trend
   const issueTypeSeries = useMemo(() => {
     const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
     return activeTypes.map((t) => ({
@@ -170,44 +160,62 @@ export default function OverviewPage() {
     }));
   }, [filters.issueTypes]);
 
-  const trendSeries = useSubTypeMode ? activeSubTypeSeries : issueTypeSeries;
-
-  // Stats
-  const totalIssues = issues.length;
-  const facilitiesCount = new Set(issues.map((i) => i.facility)).size;
-  const roundsCount = issues.filter((i) => i.rounds_issue != null).length;
-  const safetyCount = issues.filter((i) => i.safety_issue != null).length;
-  const itCount = issues.filter((i) => i.it_issue != null).length;
-
-  // ROW 1 LEFT: Facility bars broken down by sub-types
-  const facilityBarData = useMemo(() => {
-    const subTypesToShow = filters.issueSubTypes.length > 0 ? filters.issueSubTypes : allAvailableSubTypes;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const map = new Map<string, Record<string, any>>();
-    issues.forEach((issue) => {
-      const f = issue.facility;
-      if (!map.has(f)) map.set(f, { facility: f, total_issues: 0 });
-      const row = map.get(f)!;
-      row.total_issues++;
-      getSubTypes(issue).forEach((sub) => {
-        if (subTypesToShow.includes(sub)) {
-          row[sub] = (row[sub] || 0) + 1;
-        }
-      });
-    });
-    return Array.from(map.values());
-  }, [issues, filters.issueSubTypes, allAvailableSubTypes]);
-
-  const facilityBarSeries = useMemo(() => {
-    const subTypesToShow = filters.issueSubTypes.length > 0 ? filters.issueSubTypes : allAvailableSubTypes;
-    return subTypesToShow.map((st, i) => ({
+  // Sub-type series — only used when sub-type filter is active
+  const subTypeSeries = useMemo(() => {
+    return filters.issueSubTypes.map((st, i) => ({
       key: st,
       label: st,
       color: SUB_TYPE_PALETTE[i % SUB_TYPE_PALETTE.length],
     }));
-  }, [filters.issueSubTypes, allAvailableSubTypes]);
+  }, [filters.issueSubTypes]);
 
-  // ROW 1 RIGHT + ROW 2 LEFT: Monthly trend data
+  // Series used for trend line charts
+  const trendSeries = useSubTypeMode ? subTypeSeries : issueTypeSeries;
+
+  // ---- ROW 1 LEFT: Facility bar chart ----
+  // Default = issue types (Rounds/Safety/IT). Sub-types only when filter active.
+  const facilityBarData = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = new Map<string, Record<string, any>>();
+    // Pre-seed all facilities with zero counts
+    facilitiesToShow.forEach((f) => {
+      map.set(f, { facility: f, total_issues: 0, rounds_count: 0, safety_count: 0, it_count: 0 });
+    });
+
+    issues.forEach((issue) => {
+      const f = issue.facility;
+      if (!map.has(f)) map.set(f, { facility: f, total_issues: 0, rounds_count: 0, safety_count: 0, it_count: 0 });
+      const row = map.get(f)!;
+      row.total_issues++;
+      if (issue.rounds_issue) row.rounds_count++;
+      if (issue.safety_issue) row.safety_count++;
+      if (issue.it_issue) row.it_count++;
+
+      // If sub-type mode, also count per sub-type
+      if (useSubTypeMode) {
+        getSubTypes(issue).forEach((sub) => {
+          if (filters.issueSubTypes.includes(sub)) {
+            row[sub] = (row[sub] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [issues, facilitiesToShow, useSubTypeMode, filters.issueSubTypes]);
+
+  const facilityBarSeries = useMemo(() => {
+    if (useSubTypeMode) return subTypeSeries;
+    // Default: issue types
+    const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
+    return activeTypes.map((t) => ({
+      key: t === 'Rounds' ? 'rounds_count' : t === 'Safety' ? 'safety_count' : 'it_count',
+      label: t,
+      color: ISSUE_TYPE_COLORS[t] || '#94A3B8',
+    }));
+  }, [useSubTypeMode, subTypeSeries, filters.issueTypes]);
+
+  // ---- ROW 1 RIGHT: Monthly trend (dynamic line chart) ----
   const trendData = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const map = new Map<string, Record<string, any>>();
@@ -234,33 +242,58 @@ export default function OverviewPage() {
       .map((d) => ({ ...d, label: yearMonthToLabel(d.year_month) }));
   }, [issues, useSubTypeMode, filters.issueSubTypes]);
 
-  // ROW 2 RIGHT: Facility bars with total + overlapping sub-type bars
-  const facilitySubTypeData = useMemo(() => {
-    const subTypesToShow = filters.issueSubTypes.length > 0 ? filters.issueSubTypes : allAvailableSubTypes;
+  // ---- ROW 2 LEFT: Pie chart (issue type distribution) ----
+  const issueTypeData = useMemo(() => {
+    const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
+    const items = [
+      { name: 'Rounds', value: roundsCount, color: ISSUE_TYPE_COLORS.Rounds },
+      { name: 'Safety', value: safetyCount, color: ISSUE_TYPE_COLORS.Safety },
+      { name: 'IT', value: itCount, color: ISSUE_TYPE_COLORS.IT },
+    ];
+    return items.filter((d) => activeTypes.includes(d.name));
+  }, [filters.issueTypes, roundsCount, safetyCount, itCount]);
+
+  // ---- ROW 2 RIGHT: Facility breakdown ----
+  // Default = issue types. Sub-types only when filter active.
+  const facilityBreakdownData = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const map = new Map<string, Record<string, any>>();
+    // Pre-seed all facilities
+    facilitiesToShow.forEach((f) => {
+      map.set(f, { facility: f, total: 0, rounds_count: 0, safety_count: 0, it_count: 0 });
+    });
+
     issues.forEach((issue) => {
       const f = issue.facility;
-      if (!map.has(f)) map.set(f, { facility: f, total: 0 });
+      if (!map.has(f)) map.set(f, { facility: f, total: 0, rounds_count: 0, safety_count: 0, it_count: 0 });
       const row = map.get(f)!;
       row.total++;
-      getSubTypes(issue).forEach((sub) => {
-        if (subTypesToShow.includes(sub)) {
-          row[sub] = (row[sub] || 0) + 1;
-        }
-      });
-    });
-    return Array.from(map.values());
-  }, [issues, filters.issueSubTypes, allAvailableSubTypes]);
+      if (issue.rounds_issue) row.rounds_count++;
+      if (issue.safety_issue) row.safety_count++;
+      if (issue.it_issue) row.it_count++;
 
-  const facilitySubTypeSeries = useMemo(() => {
-    const subTypesToShow = filters.issueSubTypes.length > 0 ? filters.issueSubTypes : allAvailableSubTypes;
-    return subTypesToShow.map((st, i) => ({
-      key: st,
-      label: st,
-      color: SUB_TYPE_PALETTE[i % SUB_TYPE_PALETTE.length],
+      if (useSubTypeMode) {
+        getSubTypes(issue).forEach((sub) => {
+          if (filters.issueSubTypes.includes(sub)) {
+            row[sub] = (row[sub] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [issues, facilitiesToShow, useSubTypeMode, filters.issueSubTypes]);
+
+  const facilityBreakdownSeries = useMemo(() => {
+    if (useSubTypeMode) return subTypeSeries;
+    // Default: issue types
+    const activeTypes = filters.issueTypes.length > 0 ? filters.issueTypes : ISSUE_TYPES;
+    return activeTypes.map((t) => ({
+      key: t === 'Rounds' ? 'rounds_count' : t === 'Safety' ? 'safety_count' : 'it_count',
+      label: t,
+      color: ISSUE_TYPE_COLORS[t] || '#94A3B8',
     }));
-  }, [filters.issueSubTypes, allAvailableSubTypes]);
+  }, [useSubTypeMode, subTypeSeries, filters.issueTypes]);
 
   const col = (key: string) => syncCols.includes(key);
 
@@ -275,11 +308,7 @@ export default function OverviewPage() {
           value={totalIssues}
           subtitle={`Across ${facilitiesCount} facilities`}
           loading={loading}
-          icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          }
+          icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>}
         />
         {(filters.issueTypes.length === 0 || filters.issueTypes.includes('Rounds')) && (
           <StatCard title="Rounds Issues" value={roundsCount} subtitle="Staff compliance issues" loading={loading}
@@ -298,7 +327,7 @@ export default function OverviewPage() {
         )}
       </div>
 
-      {/* Row 1: Facility Sub-Type Breakdown + Monthly Trend */}
+      {/* Row 1: Issues by Facility + Monthly Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Issues by Facility" loading={loading}>
           <FacilityBarChart data={facilityBarData} series={facilityBarSeries} />
@@ -308,13 +337,13 @@ export default function OverviewPage() {
         </ChartCard>
       </div>
 
-      {/* Row 2: Dynamic Trend + Facility Sub-Type Overlay */}
+      {/* Row 2: Issue Type Distribution (pie) + Facility Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title={useSubTypeMode ? 'Sub-Issue Trend' : 'Issue Type Trend'} loading={loading}>
-          <DynamicTrendChart data={trendData} series={trendSeries} showTotal={!useSubTypeMode} />
+        <ChartCard title="Issue Type Distribution" loading={loading}>
+          <IssueTypeDonut data={issueTypeData} />
         </ChartCard>
         <ChartCard title="Facility Breakdown" loading={loading}>
-          <FacilitySubTypeChart data={facilitySubTypeData} series={facilitySubTypeSeries} />
+          <FacilitySubTypeChart data={facilityBreakdownData} series={facilityBreakdownSeries} />
         </ChartCard>
       </div>
 
