@@ -7,9 +7,10 @@ export interface Filters {
   facility: string | null;
   shift: string | null;
   year: number | null;
-  month: number | null;
+  monthFrom: number | null;
+  monthTo: number | null;
   issueTypes: string[];
-  statuses: string[];
+  issueSubTypes: string[];
 }
 
 interface FilterOptions {
@@ -18,7 +19,9 @@ interface FilterOptions {
   years: number[];
   groups: string[];
   monitoring_team: string[];
-  statuses: string[];
+  roundsIssues: string[];
+  safetyIssues: string[];
+  itIssues: string[];
 }
 
 interface FilterContextType {
@@ -26,7 +29,7 @@ interface FilterContextType {
   filterOptions: FilterOptions;
   setFilter: (key: keyof Filters, value: string | number | string[] | null) => void;
   toggleIssueType: (type: string) => void;
-  toggleStatus: (status: string) => void;
+  toggleIssueSubType: (subType: string) => void;
   resetFilters: () => void;
   hasActiveFilters: boolean;
 }
@@ -37,9 +40,10 @@ const defaultFilters: Filters = {
   facility: null,
   shift: null,
   year: null,
-  month: null,
+  monthFrom: null,
+  monthTo: null,
   issueTypes: [],
-  statuses: [],
+  issueSubTypes: [],
 };
 
 const defaultOptions: FilterOptions = {
@@ -48,7 +52,9 @@ const defaultOptions: FilterOptions = {
   years: [],
   groups: [],
   monitoring_team: [],
-  statuses: [],
+  roundsIssues: [],
+  safetyIssues: [],
+  itIssues: [],
 };
 
 const FilterContext = createContext<FilterContextType>({
@@ -56,7 +62,7 @@ const FilterContext = createContext<FilterContextType>({
   filterOptions: defaultOptions,
   setFilter: () => {},
   toggleIssueType: () => {},
-  toggleStatus: () => {},
+  toggleIssueSubType: () => {},
   resetFilters: () => {},
   hasActiveFilters: false,
 });
@@ -67,19 +73,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function fetchOptions() {
-      // Fetch filter options from RPC
+      // Fetch filter options from RPC (includes rounds_issues, safety_issues, it_issues)
       const { data } = await supabase.rpc('get_filter_options');
-
-      // Fetch distinct issue_status values directly
-      const { data: statusData } = await supabase
-        .from('issues')
-        .select('issue_status')
-        .not('issue_status', 'is', null)
-        .limit(1000);
-
-      const distinctStatuses = statusData
-        ? Array.from(new Set(statusData.map((r: { issue_status: string }) => r.issue_status))).filter(Boolean).sort()
-        : [];
 
       if (data) {
         setFilterOptions({
@@ -88,7 +83,9 @@ export function FilterProvider({ children }: { children: ReactNode }) {
           years: data.years || [],
           groups: data.groups || [],
           monitoring_team: data.monitoring_team || [],
-          statuses: distinctStatuses as string[],
+          roundsIssues: data.rounds_issues || [],
+          safetyIssues: data.safety_issues || [],
+          itIssues: data.it_issues || [],
         });
       }
     }
@@ -105,17 +102,19 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       const next = current.includes(type)
         ? current.filter((t) => t !== type)
         : [...current, type];
+      // Clear sub-type selections that no longer belong to any selected type
+      // (only if we're narrowing the selection)
       return { ...prev, issueTypes: next };
     });
   };
 
-  const toggleStatus = (status: string) => {
+  const toggleIssueSubType = (subType: string) => {
     setFilters((prev) => {
-      const current = prev.statuses;
-      const next = current.includes(status)
-        ? current.filter((s) => s !== status)
-        : [...current, status];
-      return { ...prev, statuses: next };
+      const current = prev.issueSubTypes;
+      const next = current.includes(subType)
+        ? current.filter((s) => s !== subType)
+        : [...current, subType];
+      return { ...prev, issueSubTypes: next };
     });
   };
 
@@ -125,12 +124,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     filters.facility !== null ||
     filters.shift !== null ||
     filters.year !== null ||
-    filters.month !== null ||
+    filters.monthFrom !== null ||
+    filters.monthTo !== null ||
     filters.issueTypes.length > 0 ||
-    filters.statuses.length > 0;
+    filters.issueSubTypes.length > 0;
 
   return (
-    <FilterContext.Provider value={{ filters, filterOptions, setFilter, toggleIssueType, toggleStatus, resetFilters, hasActiveFilters }}>
+    <FilterContext.Provider value={{ filters, filterOptions, setFilter, toggleIssueType, toggleIssueSubType, resetFilters, hasActiveFilters }}>
       {children}
     </FilterContext.Provider>
   );

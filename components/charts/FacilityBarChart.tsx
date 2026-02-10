@@ -1,22 +1,22 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { FACILITY_COLORS } from '@/lib/constants';
 import { formatNumber } from '@/lib/utils';
 
-interface FacilityData {
-  facility: string;
-  total_issues: number;
-  rounds_count: number;
-  safety_count: number;
-  it_count: number;
+interface SeriesDef {
+  key: string;
+  label: string;
+  color: string;
 }
 
 interface Props {
-  data: FacilityData[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>[];
+  series: SeriesDef[];
 }
 
-export default function FacilityBarChart({ data }: Props) {
+export default function FacilityBarChart({ data, series }: Props) {
   if (!data.length) {
     return (
       <div className="h-[300px] flex items-center justify-center text-[#64748B] text-sm">
@@ -25,10 +25,10 @@ export default function FacilityBarChart({ data }: Props) {
     );
   }
 
-  const sorted = [...data].sort((a, b) => b.total_issues - a.total_issues);
+  const sorted = [...data].sort((a, b) => (b.total_issues || 0) - (a.total_issues || 0));
 
   return (
-    <div className="h-[300px]">
+    <div className="h-[340px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={sorted} layout="vertical" margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
@@ -49,18 +49,37 @@ export default function FacilityBarChart({ data }: Props) {
               fontSize: '12px',
             }}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any) => [formatNumber(Number(value)), 'Issues']}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            labelFormatter={(label: any) => String(label)}
+            formatter={(value: any, name: any) => {
+              const s = series.find((s) => s.key === name);
+              return [formatNumber(Number(value)), s?.label || String(name)];
+            }}
           />
-          <Bar dataKey="total_issues" radius={[0, 4, 4, 0]} animationDuration={300}>
-            {sorted.map((entry) => (
-              <Cell
-                key={entry.facility}
-                fill={FACILITY_COLORS[entry.facility] || '#3B82F6'}
-              />
-            ))}
-          </Bar>
+          {series.length > 1 && (
+            <Legend
+              wrapperStyle={{ fontSize: '11px', color: '#94A3B8', paddingTop: '8px' }}
+              formatter={(value) => {
+                const s = series.find((s) => s.key === value);
+                return <span style={{ color: '#94A3B8' }}>{s?.label || value}</span>;
+              }}
+            />
+          )}
+          {series.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              stackId="stack"
+              fill={s.color}
+              radius={i === series.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+              animationDuration={300}
+            />
+          ))}
+          {series.length === 0 && (
+            <Bar dataKey="total_issues" radius={[0, 4, 4, 0]} animationDuration={300}>
+              {sorted.map((entry) => (
+                <Cell key={entry.facility} fill={FACILITY_COLORS[entry.facility] || '#3B82F6'} />
+              ))}
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>
