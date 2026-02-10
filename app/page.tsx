@@ -9,8 +9,11 @@ import ChartCard from '@/components/ui/ChartCard';
 import ColumnSelector, { ColumnDef } from '@/components/ui/ColumnSelector';
 import FacilityBarChart from '@/components/charts/FacilityBarChart';
 import DynamicTrendChart from '@/components/charts/DynamicTrendChart';
+import StackedBarTrendChart from '@/components/charts/StackedBarTrendChart';
+import TrendPieChart from '@/components/charts/TrendPieChart';
 import IssueTypeDonut from '@/components/charts/IssueTypeDonut';
 import FacilitySubTypeChart from '@/components/charts/FacilitySubTypeChart';
+import ChartTypeSwitcher, { ChartType } from '@/components/ui/ChartTypeSwitcher';
 import { yearMonthToLabel } from '@/lib/utils';
 
 // Consistent color palette for sub-types
@@ -60,6 +63,7 @@ export default function OverviewPage() {
   const [syncLog, setSyncLog] = useState<SyncLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncCols, setSyncCols] = useState(SYNC_COLUMNS.map((c) => c.key));
+  const [trendChartType, setTrendChartType] = useState<ChartType>('line');
 
   // Fetch data
   useEffect(() => {
@@ -361,8 +365,20 @@ export default function OverviewPage() {
         <ChartCard title="Issues by Facility" loading={loading}>
           <FacilityBarChart data={facilityBarData} series={facilityBarSeries} />
         </ChartCard>
-        <ChartCard title="Monthly Trend" loading={loading}>
-          <DynamicTrendChart data={trendData} series={trendSeries} showTotal={!useSubTypeMode} />
+        <ChartCard
+          title="Monthly Trend"
+          loading={loading}
+          action={<ChartTypeSwitcher value={trendChartType} onChange={setTrendChartType} />}
+        >
+          {trendChartType === 'line' && (
+            <DynamicTrendChart data={trendData} series={trendSeries} showTotal={!useSubTypeMode} />
+          )}
+          {trendChartType === 'pie' && (
+            <TrendPieChart data={trendData} series={trendSeries} />
+          )}
+          {trendChartType === 'bar' && (
+            <StackedBarTrendChart data={trendData} series={trendSeries} />
+          )}
         </ChartCard>
       </div>
 
