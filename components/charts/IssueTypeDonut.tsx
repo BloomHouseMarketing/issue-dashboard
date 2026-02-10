@@ -16,7 +16,7 @@ interface Props {
 export default function IssueTypeDonut({ data }: Props) {
   if (!data.length || data.every((d) => d.value === 0)) {
     return (
-      <div className="h-[300px] flex items-center justify-center text-text-muted text-sm">
+      <div className="h-[300px] flex items-center justify-center text-[#64748B] text-sm">
         No issue type data available
       </div>
     );
@@ -80,8 +80,8 @@ export default function IssueTypeDonut({ data }: Props) {
           <div key={item.name} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
             <div>
-              <span className="text-sm text-text-primary font-medium">{item.name}</span>
-              <div className="text-xs text-text-muted">
+              <span className="text-sm text-[#F8FAFC] font-medium">{item.name}</span>
+              <div className="text-xs text-[#64748B]">
                 {formatNumber(item.value)} ({total > 0 ? ((item.value / total) * 100).toFixed(1) : 0}%)
               </div>
             </div>
