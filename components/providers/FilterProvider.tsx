@@ -6,9 +6,8 @@ import { supabase } from '@/lib/supabase';
 export interface Filters {
   facility: string | null;
   shift: string | null;
-  year: number | null;
-  monthFrom: number | null;
-  monthTo: number | null;
+  dateFrom: string | null;   // "YYYY-MM" e.g. "2025-12"
+  dateTo: string | null;     // "YYYY-MM" e.g. "2026-01"
   issueTypes: string[];
   issueSubTypes: string[];
 }
@@ -39,9 +38,8 @@ const ISSUE_TYPES = ['Rounds', 'Safety', 'IT'];
 const defaultFilters: Filters = {
   facility: null,
   shift: null,
-  year: null,
-  monthFrom: null,
-  monthTo: null,
+  dateFrom: null,
+  dateTo: null,
   issueTypes: [],
   issueSubTypes: [],
 };
@@ -123,9 +121,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   const hasActiveFilters =
     filters.facility !== null ||
     filters.shift !== null ||
-    filters.year !== null ||
-    filters.monthFrom !== null ||
-    filters.monthTo !== null ||
+    filters.dateFrom !== null ||
+    filters.dateTo !== null ||
     filters.issueTypes.length > 0 ||
     filters.issueSubTypes.length > 0;
 

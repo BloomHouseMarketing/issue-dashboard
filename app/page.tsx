@@ -77,19 +77,14 @@ export default function OverviewPage() {
       if (filters.facility) query = query.eq('facility', filters.facility);
       if (filters.shift) query = query.eq('shift', filters.shift);
 
-      if (filters.year && filters.monthFrom && filters.monthTo) {
-        const startDate = `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`;
-        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
-        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
-        query = query.gte('round_date', startDate).lt('round_date', `${endYear}-${String(endMonth).padStart(2, '0')}-01`);
-      } else if (filters.year && filters.monthFrom) {
-        query = query.gte('round_date', `${filters.year}-${String(filters.monthFrom).padStart(2, '0')}-01`).lt('round_date', `${filters.year + 1}-01-01`);
-      } else if (filters.year && filters.monthTo) {
-        const endMonth = filters.monthTo === 12 ? 1 : filters.monthTo + 1;
-        const endYear = filters.monthTo === 12 ? filters.year + 1 : filters.year;
-        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${endYear}-${String(endMonth).padStart(2, '0')}-01`);
-      } else if (filters.year) {
-        query = query.gte('round_date', `${filters.year}-01-01`).lt('round_date', `${filters.year + 1}-01-01`);
+      if (filters.dateFrom) {
+        query = query.gte('round_date', `${filters.dateFrom}-01`);
+      }
+      if (filters.dateTo) {
+        const [ty, tm] = filters.dateTo.split('-').map(Number);
+        const endMonth = tm === 12 ? 1 : tm + 1;
+        const endYear = tm === 12 ? ty + 1 : ty;
+        query = query.lt('round_date', `${endYear}-${String(endMonth).padStart(2, '0')}-01`);
       }
 
       if (filters.issueTypes.length > 0) {
@@ -128,18 +123,7 @@ export default function OverviewPage() {
 
       const syncRes = await supabase.from('sync_log').select('*').order('created_at', { ascending: false }).limit(5);
 
-      let rows = allRows;
-      if (!filters.year && (filters.monthFrom || filters.monthTo)) {
-        rows = rows.filter((r) => {
-          if (!r.round_date) return false;
-          const m = parseInt(r.round_date.substring(5, 7));
-          if (filters.monthFrom && filters.monthTo) return m >= filters.monthFrom && m <= filters.monthTo;
-          if (filters.monthFrom) return m >= filters.monthFrom;
-          if (filters.monthTo) return m <= filters.monthTo;
-          return true;
-        });
-      }
-      setIssues(rows);
+      setIssues(allRows);
 
       if (syncRes.data) setSyncLog(syncRes.data);
       setLoading(false);

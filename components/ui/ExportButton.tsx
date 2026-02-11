@@ -29,11 +29,11 @@ export default function ExportButton({ chartRef, title }: ExportButtonProps) {
     const parts: string[] = [];
     if (filters.facility) parts.push(`Facility: ${filters.facility}`);
     if (filters.shift) parts.push(`Shift: ${filters.shift}`);
-    if (filters.year) parts.push(`Year: ${filters.year}`);
-    if (filters.monthFrom !== null || filters.monthTo !== null) {
-      const from = filters.monthFrom !== null ? SHORT_MONTH_NAMES[filters.monthFrom - 1] : 'Jan';
-      const to = filters.monthTo !== null ? SHORT_MONTH_NAMES[filters.monthTo - 1] : 'Dec';
-      parts.push(`Months: ${from} – ${to}`);
+    if (filters.dateFrom || filters.dateTo) {
+      const fmt = (ym: string) => { const [y, m] = ym.split('-'); return `${SHORT_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`; };
+      if (filters.dateFrom && filters.dateTo) parts.push(`Range: ${fmt(filters.dateFrom)} – ${fmt(filters.dateTo)}`);
+      else if (filters.dateFrom) parts.push(`From: ${fmt(filters.dateFrom)}`);
+      else if (filters.dateTo) parts.push(`To: ${fmt(filters.dateTo)}`);
     }
     if (filters.issueTypes.length > 0) parts.push(`Types: ${filters.issueTypes.join(', ')}`);
     if (filters.issueSubTypes.length > 0) parts.push(`Sub-types: ${filters.issueSubTypes.join(', ')}`);
