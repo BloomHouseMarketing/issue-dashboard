@@ -128,7 +128,7 @@ export default function FacilityPage() {
         supabase.rpc('get_dashboard_stats', {
           p_facility: selectedFacility,
           p_group_name: null,
-          p_year: filters.year,
+          p_year: filters.dateFrom ? parseInt(filters.dateFrom.split('-')[0], 10) : null,
           p_month: null,
         }),
         supabase.from('v_group_breakdown').select('*').eq('facility', selectedFacility).order('issue_count', { ascending: false }),
@@ -170,7 +170,7 @@ export default function FacilityPage() {
 
     fetchData();
     setPage(0);
-  }, [selectedFacility, filters.year]);
+  }, [selectedFacility, filters.dateFrom, filters.dateTo]);
 
   // Fetch issues with pagination, search, and issue type filtering
   useEffect(() => {

@@ -4,16 +4,41 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useFilters, ISSUE_TYPES } from '@/components/providers/FilterProvider';
 import { ISSUE_TYPE_COLORS, SHORT_MONTH_NAMES } from '@/lib/constants';
 
+/** Format "YYYY-MM" → "Mon YYYY" */
+function fmtDate(ym: string): string {
+  const [y, m] = ym.split('-');
+  return `${SHORT_MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+}
+
 export default function FilterBar() {
   const { filters, filterOptions, setFilter, toggleIssueType, toggleIssueSubType, resetFilters, hasActiveFilters } = useFilters();
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
   const [subTypeDropdownOpen, setSubTypeDropdownOpen] = useState(false);
-  const [monthFromOpen, setMonthFromOpen] = useState(false);
-  const [monthToOpen, setMonthToOpen] = useState(false);
+  const [dateFromOpen, setDateFromOpen] = useState(false);
+  const [dateToOpen, setDateToOpen] = useState(false);
   const issueDropdownRef = useRef<HTMLDivElement>(null);
   const subTypeDropdownRef = useRef<HTMLDivElement>(null);
-  const monthFromRef = useRef<HTMLDivElement>(null);
-  const monthToRef = useRef<HTMLDivElement>(null);
+  const dateFromRef = useRef<HTMLDivElement>(null);
+  const dateToRef = useRef<HTMLDivElement>(null);
+
+  // Year shown in each picker panel (defaults to current year or the selected value's year)
+  const currentYear = new Date().getFullYear();
+  const [fromPanelYear, setFromPanelYear] = useState(() =>
+    filters.dateFrom ? parseInt(filters.dateFrom.split('-')[0], 10) : currentYear,
+  );
+  const [toPanelYear, setToPanelYear] = useState(() =>
+    filters.dateTo ? parseInt(filters.dateTo.split('-')[0], 10) : currentYear,
+  );
+
+  // Sync panel years when filter values change externally (e.g. reset)
+  useEffect(() => {
+    if (filters.dateFrom) setFromPanelYear(parseInt(filters.dateFrom.split('-')[0], 10));
+    else setFromPanelYear(currentYear);
+  }, [filters.dateFrom, currentYear]);
+  useEffect(() => {
+    if (filters.dateTo) setToPanelYear(parseInt(filters.dateTo.split('-')[0], 10));
+    else setToPanelYear(currentYear);
+  }, [filters.dateTo, currentYear]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -24,11 +49,11 @@ export default function FilterBar() {
       if (subTypeDropdownRef.current && !subTypeDropdownRef.current.contains(e.target as Node)) {
         setSubTypeDropdownOpen(false);
       }
-      if (monthFromRef.current && !monthFromRef.current.contains(e.target as Node)) {
-        setMonthFromOpen(false);
+      if (dateFromRef.current && !dateFromRef.current.contains(e.target as Node)) {
+        setDateFromOpen(false);
       }
-      if (monthToRef.current && !monthToRef.current.contains(e.target as Node)) {
-        setMonthToOpen(false);
+      if (dateToRef.current && !dateToRef.current.contains(e.target as Node)) {
+        setDateToOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -62,17 +87,101 @@ export default function FilterBar() {
     return `${filters.issueSubTypes.length} selected`;
   }, [filters.issueSubTypes]);
 
-  // Compute a readable label for the month range
-  const monthRangeLabel = useMemo(() => {
-    if (filters.monthFrom && filters.monthTo) {
-      return `${SHORT_MONTH_NAMES[filters.monthFrom - 1]} – ${SHORT_MONTH_NAMES[filters.monthTo - 1]}`;
-    }
-    if (filters.monthFrom) return `From ${SHORT_MONTH_NAMES[filters.monthFrom - 1]}`;
-    if (filters.monthTo) return `To ${SHORT_MONTH_NAMES[filters.monthTo - 1]}`;
+  // Compute date range chip label
+  const dateRangeLabel = useMemo(() => {
+    if (filters.dateFrom && filters.dateTo) return `${fmtDate(filters.dateFrom)} – ${fmtDate(filters.dateTo)}`;
+    if (filters.dateFrom) return `From ${fmtDate(filters.dateFrom)}`;
+    if (filters.dateTo) return `To ${fmtDate(filters.dateTo)}`;
     return null;
-  }, [filters.monthFrom, filters.monthTo]);
+  }, [filters.dateFrom, filters.dateTo]);
+
+  // Available year range from filterOptions, or fallback
+  const minYear = filterOptions.years.length > 0 ? Math.min(...filterOptions.years) : currentYear - 2;
+  const maxYear = filterOptions.years.length > 0 ? Math.max(...filterOptions.years) : currentYear + 1;
 
   const selectClass = 'bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] appearance-none cursor-pointer';
+
+  /** Reusable month+year picker panel */
+  function MonthYearPanel({
+    panelYear,
+    setPanelYear,
+    selected,
+    onSelect,
+    onClear,
+    onClose,
+  }: {
+    panelYear: number;
+    setPanelYear: (y: number) => void;
+    selected: string | null;
+    onSelect: (val: string) => void;
+    onClear: () => void;
+    onClose: () => void;
+  }) {
+    const selYear = selected ? parseInt(selected.split('-')[0], 10) : null;
+    const selMonth = selected ? parseInt(selected.split('-')[1], 10) : null;
+
+    return (
+      <div className="absolute top-full left-0 mt-1 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-50 p-2 w-[240px]">
+        {/* Year navigation */}
+        <div className="flex items-center justify-between mb-2 px-1">
+          <button
+            onClick={() => setPanelYear(Math.max(minYear, panelYear - 1))}
+            disabled={panelYear <= minYear}
+            className="p-1 rounded hover:bg-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-[#F8FAFC]">{panelYear}</span>
+          <button
+            onClick={() => setPanelYear(Math.min(maxYear, panelYear + 1))}
+            disabled={panelYear >= maxYear}
+            className="p-1 rounded hover:bg-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+        </div>
+        {/* Month grid */}
+        <div className="grid grid-cols-3 gap-1">
+          {SHORT_MONTH_NAMES.map((m, i) => {
+            const monthNum = i + 1;
+            const val = `${panelYear}-${String(monthNum).padStart(2, '0')}`;
+            const isSelected = selYear === panelYear && selMonth === monthNum;
+            // Highlight range between dateFrom and dateTo
+            const fromVal = filters.dateFrom || '';
+            const toVal = filters.dateTo || '';
+            const isInRange = fromVal && toVal && val >= fromVal && val <= toVal && !isSelected;
+            return (
+              <button
+                key={i}
+                onClick={() => { onSelect(val); onClose(); }}
+                className={`px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  isSelected
+                    ? 'bg-[#3B82F6] text-white'
+                    : isInRange
+                      ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
+                      : 'text-[#F8FAFC] hover:bg-[#334155]'
+                }`}
+              >
+                {m}
+              </button>
+            );
+          })}
+        </div>
+        {selected && (
+          <button
+            onClick={() => { onClear(); onClose(); }}
+            className="w-full mt-2 pt-2 border-t border-[#334155] text-xs text-[#94A3B8] hover:text-[#F8FAFC] transition-colors text-left px-1"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#1E293B] border-b border-[#334155] px-4 lg:px-6 py-3">
@@ -101,111 +210,51 @@ export default function FilterBar() {
           ))}
         </select>
 
-        {/* Year */}
-        <select
-          value={filters.year || ''}
-          onChange={(e) => setFilter('year', e.target.value ? parseInt(e.target.value) : null)}
-          className={selectClass}
-        >
-          <option value="">All Years</option>
-          {filterOptions.years?.map((y: number) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
-
-        {/* Month From — custom dropdown */}
-        <div className="relative" ref={monthFromRef}>
+        {/* Date From — combined month+year picker */}
+        <div className="relative" ref={dateFromRef}>
           <button
-            onClick={() => { setMonthFromOpen(!monthFromOpen); setMonthToOpen(false); }}
-            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[120px]"
+            onClick={() => { setDateFromOpen(!dateFromOpen); setDateToOpen(false); }}
+            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[130px]"
           >
-            <span>{filters.monthFrom ? SHORT_MONTH_NAMES[filters.monthFrom - 1] : 'From Month'}</span>
-            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${monthFromOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <span>{filters.dateFrom ? fmtDate(filters.dateFrom) : 'From'}</span>
+            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${dateFromOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
             </svg>
           </button>
-          {monthFromOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-50 p-2 w-[220px]">
-              <div className="grid grid-cols-3 gap-1">
-                {SHORT_MONTH_NAMES.map((m, i) => {
-                  const monthNum = i + 1;
-                  const isSelected = filters.monthFrom === monthNum;
-                  const isInRange = filters.monthFrom && filters.monthTo && monthNum >= filters.monthFrom && monthNum <= filters.monthTo;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => { setFilter('monthFrom', monthNum); setMonthFromOpen(false); }}
-                      className={`px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        isSelected
-                          ? 'bg-[#3B82F6] text-white'
-                          : isInRange
-                            ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
-                            : 'text-[#F8FAFC] hover:bg-[#334155]'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-              </div>
-              {filters.monthFrom && (
-                <button
-                  onClick={() => { setFilter('monthFrom', null); setMonthFromOpen(false); }}
-                  className="w-full mt-2 pt-2 border-t border-[#334155] text-xs text-[#94A3B8] hover:text-[#F8FAFC] transition-colors text-left px-1"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+          {dateFromOpen && (
+            <MonthYearPanel
+              panelYear={fromPanelYear}
+              setPanelYear={setFromPanelYear}
+              selected={filters.dateFrom}
+              onSelect={(val) => setFilter('dateFrom', val)}
+              onClear={() => setFilter('dateFrom', null)}
+              onClose={() => setDateFromOpen(false)}
+            />
           )}
         </div>
 
-        <span className="text-[#64748B] text-xs">–</span>
+        <span className="text-[#64748B] text-xs">&ndash;</span>
 
-        {/* Month To — custom dropdown */}
-        <div className="relative" ref={monthToRef}>
+        {/* Date To — combined month+year picker */}
+        <div className="relative" ref={dateToRef}>
           <button
-            onClick={() => { setMonthToOpen(!monthToOpen); setMonthFromOpen(false); }}
-            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[120px]"
+            onClick={() => { setDateToOpen(!dateToOpen); setDateFromOpen(false); }}
+            className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-lg px-3 py-1.5 text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] cursor-pointer min-w-[130px]"
           >
-            <span>{filters.monthTo ? SHORT_MONTH_NAMES[filters.monthTo - 1] : 'To Month'}</span>
-            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${monthToOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <span>{filters.dateTo ? fmtDate(filters.dateTo) : 'To'}</span>
+            <svg className={`w-4 h-4 text-[#94A3B8] transition-transform ml-auto ${dateToOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
             </svg>
           </button>
-          {monthToOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-[#1E293B] border border-[#334155] rounded-lg shadow-xl z-50 p-2 w-[220px]">
-              <div className="grid grid-cols-3 gap-1">
-                {SHORT_MONTH_NAMES.map((m, i) => {
-                  const monthNum = i + 1;
-                  const isSelected = filters.monthTo === monthNum;
-                  const isInRange = filters.monthFrom && filters.monthTo && monthNum >= filters.monthFrom && monthNum <= filters.monthTo;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => { setFilter('monthTo', monthNum); setMonthToOpen(false); }}
-                      className={`px-2 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        isSelected
-                          ? 'bg-[#3B82F6] text-white'
-                          : isInRange
-                            ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
-                            : 'text-[#F8FAFC] hover:bg-[#334155]'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-              </div>
-              {filters.monthTo && (
-                <button
-                  onClick={() => { setFilter('monthTo', null); setMonthToOpen(false); }}
-                  className="w-full mt-2 pt-2 border-t border-[#334155] text-xs text-[#94A3B8] hover:text-[#F8FAFC] transition-colors text-left px-1"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
+          {dateToOpen && (
+            <MonthYearPanel
+              panelYear={toPanelYear}
+              setPanelYear={setToPanelYear}
+              selected={filters.dateTo}
+              onSelect={(val) => setFilter('dateTo', val)}
+              onClear={() => setFilter('dateTo', null)}
+              onClose={() => setDateToOpen(false)}
+            />
           )}
         </div>
 
@@ -348,16 +397,10 @@ export default function FilterBar() {
               <button onClick={() => setFilter('shift', null)} className="hover:text-[#2563EB] ml-0.5">&times;</button>
             </span>
           )}
-          {filters.year && (
+          {dateRangeLabel && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3B82F6]/10 text-[#3B82F6] text-xs rounded-full">
-              {filters.year}
-              <button onClick={() => setFilter('year', null)} className="hover:text-[#2563EB] ml-0.5">&times;</button>
-            </span>
-          )}
-          {monthRangeLabel && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3B82F6]/10 text-[#3B82F6] text-xs rounded-full">
-              {monthRangeLabel}
-              <button onClick={() => { setFilter('monthFrom', null); setFilter('monthTo', null); }} className="hover:text-[#2563EB] ml-0.5">&times;</button>
+              {dateRangeLabel}
+              <button onClick={() => { setFilter('dateFrom', null); setFilter('dateTo', null); }} className="hover:text-[#2563EB] ml-0.5">&times;</button>
             </span>
           )}
           {filters.issueTypes.map((type) => (
